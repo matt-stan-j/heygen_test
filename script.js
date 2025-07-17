@@ -7,7 +7,7 @@ class HeyGenAWS {
         this.chatSessionId = this.generateUUID();
         
         // Your API Gateway URL
-        this.AWS_API_URL = 'https://YOUR-API-ID.execute-api.YOUR-REGION.amazonaws.com/prod';
+        this.AWS_API_URL = 'https://x4p585jeee.execute-api.ap-southeast-1.amazonaws.com/prod';
         
         this.initializeEventListeners();
         this.updateStatus('Ready to start');
