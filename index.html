@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
     <title>HeyGen Avatar on AWS</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="icon" href="data:,">
 </head>
 
 <body class="bg-gray-100 p-5 font-sans">
@@ -33,7 +34,7 @@
             </button>
         </div>
 
-        <video id="mediaElement" class="w-full max-h-[400px] border rounded-lg my-5" autoplay></video>
+        <video id="mediaElement" class="w-full max-h-[400px] border rounded-lg my-5" autoplay playsinline></video>
         <div id="status" class="p-2.5 bg-gray-50 border border-gray-300 rounded-md h-[100px] overflow-y-auto font-mono text-sm"></div>
     </div>
 
