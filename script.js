@@ -6,7 +6,7 @@ class HeyGenAWS {
         this.sessionToken = null;
         this.chatSessionId = this.generateUUID();
         
-        // Your API Gateway URL
+        // Replace with your API Gateway URL
         this.AWS_API_URL = 'https://x4p585jeee.execute-api.ap-southeast-1.amazonaws.com/prod';
         
         this.initializeEventListeners();
@@ -48,12 +48,20 @@ class HeyGenAWS {
             const data = await response.json();
             console.log("Create session response:", data);
             
-            if (data.error) {
-                throw new Error(data.error);
+            // Handle nested response format
+            if (data.body) {
+                const bodyData = JSON.parse(data.body);
+                this.sessionInfo = bodyData.session_info;
+                this.sessionToken = bodyData.session_token;
+            } else {
+                this.sessionInfo = data.session_info;
+                this.sessionToken = data.session_token;
             }
             
-            this.sessionInfo = data.session_info;
-            this.sessionToken = data.session_token;
+            if (!this.sessionInfo) {
+                throw new Error("Failed to create session");
+            }
+            
             this.updateStatus(`Session created: ${this.sessionInfo.session_id}`);
 
             await this.setupLiveKit();
@@ -153,12 +161,20 @@ class HeyGenAWS {
             const aiData = await aiResponse.json();
             console.log("AI response:", aiData);
             
-            const botMessage = aiData.message || 'No response';
+            // Parse the nested JSON response
+            let botMessage;
+            if (aiData.body) {
+                // Response from API Gateway includes a body property with JSON string
+                const bodyData = JSON.parse(aiData.body);
+                botMessage = bodyData.message;
+            } else {
+                botMessage = aiData.message;
+            }
             
             this.updateStatus(`AI: ${botMessage}`);
 
             // Make avatar speak the AI response
-            if (this.sessionInfo) {
+            if (this.sessionInfo && botMessage) {
                 await this.makeAvatarSpeak(botMessage);
             }
 
@@ -186,7 +202,20 @@ class HeyGenAWS {
             const speakData = await speakResponse.json();
             console.log("Speak response:", speakData);
             
-            this.updateStatus('Avatar speaking request sent');
+            // Handle nested response format
+            let success = false;
+            if (speakData.body) {
+                const bodyData = JSON.parse(speakData.body);
+                success = bodyData.success;
+            } else {
+                success = speakData.success;
+            }
+            
+            if (success) {
+                this.updateStatus('Avatar speaking request sent');
+            } else {
+                this.updateStatus('Failed to make avatar speak');
+            }
         } catch (error) {
             this.updateStatus(`Speak error: ${error.message}`);
             console.error("Speak error:", error);
