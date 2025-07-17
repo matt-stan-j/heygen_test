@@ -6,8 +6,8 @@ class HeyGenAWS {
         this.sessionToken = null;
         this.chatSessionId = this.generateUUID();
         
-        // Replace with your API Gateway URL from the test
-        this.AWS_API_URL = 'https://x4p585jeee.execute-api.ap-southeast-1.amazonaws.com/prod';
+        // Your API Gateway URL
+        this.AWS_API_URL = 'https://YOUR-API-ID.execute-api.YOUR-REGION.amazonaws.com/prod';
         
         this.initializeEventListeners();
         this.updateStatus('Ready to start');
@@ -68,46 +68,92 @@ class HeyGenAWS {
     async setupLiveKit() {
         this.updateStatus('Setting up LiveKit connection...');
         
-        this.room = new LivekitClient.Room({
-            adaptiveStream: true,
-            dynacast: true,
-            videoCaptureDefaults: {
-                resolution: LivekitClient.VideoPresets.h720.resolution,
-            },
-        });
-
-        this.mediaStream = new MediaStream();
-        
-        this.room.on(LivekitClient.RoomEvent.TrackSubscribed, (track) => {
-            if (track.kind === 'video' || track.kind === 'audio') {
-                this.mediaStream.addTrack(track.mediaStreamTrack);
-                if (this.mediaStream.getVideoTracks().length > 0 && 
-                    this.mediaStream.getAudioTracks().length > 0) {
-                    document.getElementById('mediaElement').srcObject = this.mediaStream;
-                    this.updateStatus('Video stream connected');
+        try {
+            // Configure LiveKit room with proper options
+            this.room = new LivekitClient.Room({
+                adaptiveStream: true,
+                dynacast: true,
+                videoCaptureDefaults: {
+                    resolution: LivekitClient.VideoPresets.h720.resolution,
+                },
+                // Add these options to improve WebRTC stability
+                rtcConfig: {
+                    iceTransportPolicy: 'all',
+                    bundlePolicy: 'max-bundle',
+                    sdpSemantics: 'unified-plan'
                 }
-            }
-        });
+            });
 
-        await this.room.prepareConnection(this.sessionInfo.url, this.sessionInfo.access_token);
-        this.updateStatus('LiveKit connection prepared');
+            this.mediaStream = new MediaStream();
+            
+            // Handle track subscription
+            this.room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                this.updateStatus(`Track subscribed: ${track.kind} from ${participant.identity}`);
+                
+                if (track.kind === 'video' || track.kind === 'audio') {
+                    this.mediaStream.addTrack(track.mediaStreamTrack);
+                    
+                    // Check if we have both audio and video
+                    if (this.mediaStream.getVideoTracks().length > 0) {
+                        document.getElementById('mediaElement').srcObject = this.mediaStream;
+                        this.updateStatus('Video stream connected');
+                    }
+                }
+            });
+            
+            // Handle connection state changes
+            this.room.on(LivekitClient.RoomEvent.ConnectionStateChanged, (state) => {
+                this.updateStatus(`Connection state: ${state}`);
+            });
+            
+            // Handle disconnection
+            this.room.on(LivekitClient.RoomEvent.Disconnected, () => {
+                this.updateStatus('Disconnected from LiveKit room');
+            });
+            
+            // Handle errors
+            this.room.on(LivekitClient.RoomEvent.ConnectionQualityChanged, (quality) => {
+                this.updateStatus(`Connection quality: ${quality}`);
+            });
+
+            await this.room.prepareConnection(this.sessionInfo.url, this.sessionInfo.access_token);
+            this.updateStatus('LiveKit connection prepared');
+            
+        } catch (error) {
+            this.updateStatus(`LiveKit setup error: ${error.message}`);
+            throw error;
+        }
     }
 
     async startStreaming() {
         this.updateStatus('Starting streaming...');
         
-        // Start streaming via AWS Lambda
-        await fetch(`${this.AWS_API_URL}/heygen/start`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                session_id: this.sessionInfo.session_id,
-                session_token: this.sessionToken
-            })
-        });
+        try {
+            // Start streaming via AWS Lambda
+            const startResponse = await fetch(`${this.AWS_API_URL}/heygen/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: this.sessionInfo.session_id,
+                    session_token: this.sessionToken
+                })
+            });
+            
+            if (!startResponse.ok) {
+                const errorData = await startResponse.json();
+                throw new Error(errorData.error || 'Failed to start streaming');
+            }
 
-        await this.room.connect(this.sessionInfo.url, this.sessionInfo.access_token);
-        this.updateStatus('Streaming started');
+            // Connect to LiveKit room with proper options
+            await this.room.connect(this.sessionInfo.url, this.sessionInfo.access_token, {
+                autoSubscribe: true
+            });
+            
+            this.updateStatus('Streaming started');
+        } catch (error) {
+            this.updateStatus(`Streaming error: ${error.message}`);
+            throw error;
+        }
     }
 
     async sendToAI() {
@@ -147,15 +193,26 @@ class HeyGenAWS {
     async makeAvatarSpeak(text) {
         this.updateStatus('Avatar speaking...');
         
-        await fetch(`${this.AWS_API_URL}/heygen/speak`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                session_id: this.sessionInfo.session_id,
-                session_token: this.sessionToken,
-                text: text
-            })
-        });
+        try {
+            const speakResponse = await fetch(`${this.AWS_API_URL}/heygen/speak`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: this.sessionInfo.session_id,
+                    session_token: this.sessionToken,
+                    text: text
+                })
+            });
+            
+            if (!speakResponse.ok) {
+                const errorData = await speakResponse.json();
+                throw new Error(errorData.error || 'Failed to make avatar speak');
+            }
+            
+            this.updateStatus('Avatar speaking request sent');
+        } catch (error) {
+            this.updateStatus(`Speak error: ${error.message}`);
+        }
     }
 
     async closeSession() {
