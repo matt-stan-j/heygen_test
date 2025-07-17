@@ -7,7 +7,7 @@ class HeyGenAWS {
         this.chatSessionId = this.generateUUID();
         
         // Your API Gateway URL
-        this.AWS_API_URL = 'https://x4p585jeee.execute-api.ap-southeast-1.amazonaws.com/prod';
+        this.AWS_API_URL = 'https://YOUR-API-ID.execute-api.YOUR-REGION.amazonaws.com/prod';
         
         this.initializeEventListeners();
         this.updateStatus('Ready to start');
@@ -27,6 +27,7 @@ class HeyGenAWS {
         const statusElement = document.getElementById('status');
         statusElement.innerHTML += `[${timestamp}] ${message}<br>`;
         statusElement.scrollTop = statusElement.scrollHeight;
+        console.log(`[${timestamp}] ${message}`);
     }
 
     async startSession() {
@@ -45,6 +46,7 @@ class HeyGenAWS {
             });
 
             const data = await response.json();
+            console.log("Create session response:", data);
             
             if (data.error) {
                 throw new Error(data.error);
@@ -62,6 +64,7 @@ class HeyGenAWS {
         } catch (error) {
             document.getElementById('startBtn').disabled = false;
             this.updateStatus(`Error: ${error.message}`);
+            console.error("Start session error:", error);
         }
     }
 
@@ -69,58 +72,32 @@ class HeyGenAWS {
         this.updateStatus('Setting up LiveKit connection...');
         
         try {
-            // Configure LiveKit room with proper options
             this.room = new LivekitClient.Room({
                 adaptiveStream: true,
                 dynacast: true,
                 videoCaptureDefaults: {
                     resolution: LivekitClient.VideoPresets.h720.resolution,
-                },
-                // Add these options to improve WebRTC stability
-                rtcConfig: {
-                    iceTransportPolicy: 'all',
-                    bundlePolicy: 'max-bundle',
-                    sdpSemantics: 'unified-plan'
                 }
             });
 
             this.mediaStream = new MediaStream();
             
-            // Handle track subscription
-            this.room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
-                this.updateStatus(`Track subscribed: ${track.kind} from ${participant.identity}`);
-                
+            this.room.on(LivekitClient.RoomEvent.TrackSubscribed, (track) => {
+                console.log("Track subscribed:", track.kind);
                 if (track.kind === 'video' || track.kind === 'audio') {
                     this.mediaStream.addTrack(track.mediaStreamTrack);
-                    
-                    // Check if we have both audio and video
                     if (this.mediaStream.getVideoTracks().length > 0) {
                         document.getElementById('mediaElement').srcObject = this.mediaStream;
                         this.updateStatus('Video stream connected');
                     }
                 }
             });
-            
-            // Handle connection state changes
-            this.room.on(LivekitClient.RoomEvent.ConnectionStateChanged, (state) => {
-                this.updateStatus(`Connection state: ${state}`);
-            });
-            
-            // Handle disconnection
-            this.room.on(LivekitClient.RoomEvent.Disconnected, () => {
-                this.updateStatus('Disconnected from LiveKit room');
-            });
-            
-            // Handle errors
-            this.room.on(LivekitClient.RoomEvent.ConnectionQualityChanged, (quality) => {
-                this.updateStatus(`Connection quality: ${quality}`);
-            });
 
             await this.room.prepareConnection(this.sessionInfo.url, this.sessionInfo.access_token);
             this.updateStatus('LiveKit connection prepared');
-            
         } catch (error) {
             this.updateStatus(`LiveKit setup error: ${error.message}`);
+            console.error("LiveKit setup error:", error);
             throw error;
         }
     }
@@ -139,19 +116,14 @@ class HeyGenAWS {
                 })
             });
             
-            if (!startResponse.ok) {
-                const errorData = await startResponse.json();
-                throw new Error(errorData.error || 'Failed to start streaming');
-            }
+            const startData = await startResponse.json();
+            console.log("Start streaming response:", startData);
 
-            // Connect to LiveKit room with proper options
-            await this.room.connect(this.sessionInfo.url, this.sessionInfo.access_token, {
-                autoSubscribe: true
-            });
-            
+            await this.room.connect(this.sessionInfo.url, this.sessionInfo.access_token);
             this.updateStatus('Streaming started');
         } catch (error) {
             this.updateStatus(`Streaming error: ${error.message}`);
+            console.error("Streaming error:", error);
             throw error;
         }
     }
@@ -166,6 +138,9 @@ class HeyGenAWS {
 
         try {
             // Send to your AI backend
+            this.updateStatus('Sending to AI...');
+            console.log("Sending to AI:", message);
+            
             const aiResponse = await fetch(`${this.AWS_API_URL}/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -176,6 +151,8 @@ class HeyGenAWS {
             });
 
             const aiData = await aiResponse.json();
+            console.log("AI response:", aiData);
+            
             const botMessage = aiData.message || 'No response';
             
             this.updateStatus(`AI: ${botMessage}`);
@@ -186,12 +163,14 @@ class HeyGenAWS {
             }
 
         } catch (error) {
-            this.updateStatus(`Error: ${error.message}`);
+            this.updateStatus(`AI error: ${error.message}`);
+            console.error("AI error:", error);
         }
     }
 
     async makeAvatarSpeak(text) {
         this.updateStatus('Avatar speaking...');
+        console.log("Making avatar speak:", text);
         
         try {
             const speakResponse = await fetch(`${this.AWS_API_URL}/heygen/speak`, {
@@ -204,14 +183,13 @@ class HeyGenAWS {
                 })
             });
             
-            if (!speakResponse.ok) {
-                const errorData = await speakResponse.json();
-                throw new Error(errorData.error || 'Failed to make avatar speak');
-            }
+            const speakData = await speakResponse.json();
+            console.log("Speak response:", speakData);
             
             this.updateStatus('Avatar speaking request sent');
         } catch (error) {
             this.updateStatus(`Speak error: ${error.message}`);
+            console.error("Speak error:", error);
         }
     }
 
@@ -224,7 +202,7 @@ class HeyGenAWS {
         this.updateStatus('Closing session...');
         
         try {
-            await fetch(`${this.AWS_API_URL}/heygen/close`, {
+            const closeResponse = await fetch(`${this.AWS_API_URL}/heygen/close`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -232,6 +210,9 @@ class HeyGenAWS {
                     session_token: this.sessionToken
                 })
             });
+            
+            const closeData = await closeResponse.json();
+            console.log("Close session response:", closeData);
 
             if (this.room) {
                 this.room.disconnect();
@@ -243,6 +224,7 @@ class HeyGenAWS {
             this.updateStatus('Session closed');
         } catch (error) {
             this.updateStatus(`Error closing session: ${error.message}`);
+            console.error("Close session error:", error);
         }
     }
 
