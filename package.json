@@ -1,0 +1,6 @@
+{
+  "name": "heygen-avatar",
+  "version": "1.0.0",
+  "description": "HeyGen Avatar with AWS Integration",
+  "main": "index.html"
+}
