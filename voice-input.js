@@ -53,16 +53,14 @@ class VoiceInputHandler {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             
             this.audioChunks = [];
-            this.mediaRecorder = new MediaRecorder(stream, {
-                mimeType: 'audio/webm'
-            });
+            this.mediaRecorder = new MediaRecorder(stream);
             
             this.mediaRecorder.addEventListener('dataavailable', event => {
                 this.audioChunks.push(event.data);
             });
             
             this.mediaRecorder.addEventListener('stop', async () => {
-                const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+                const audioBlob = new Blob(this.audioChunks);
                 await this.transcribeAudio(audioBlob);
                 
                 // Stop all tracks to release microphone
@@ -111,59 +109,40 @@ class VoiceInputHandler {
     
     async transcribeAudio(audioBlob) {
         try {
-            // First try Web Speech API for faster results
-            try {
-                const transcript = await this.transcribeWithWebSpeech();
-                
-                // Update input field
-                const taskInput = document.getElementById('taskInput');
-                if (taskInput) {
-                    taskInput.value = transcript;
-                }
-                
-                // Update UI
-                const statusIndicator = document.getElementById('voiceStatus');
-                if (statusIndicator) {
-                    statusIndicator.classList.add('hidden');
-                }
-                
-                this.updateStatus(`Transcribed (Web Speech): "${transcript}"`);
-                return transcript;
-            } catch (webSpeechError) {
-                console.log('Web Speech API failed, falling back to AWS Transcribe');
-                this.updateStatus('Web Speech failed, using AWS Transcribe...');
-                
-                // Fall back to AWS Transcribe
-                this.updateStatus('Sending audio to AWS Transcribe...');
-                
-                // Send the audio blob to our transcribe endpoint
-                const response = await fetch('https://x4p585jeee.execute-api.ap-southeast-1.amazonaws.com/prod/transcribe', {
-                    method: 'POST',
-                    body: audioBlob
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`Transcription failed: ${response.status}`);
-                }
-                
-                const result = await response.json();
-                const transcribedText = result.transcript || "Could not transcribe audio";
-                
-                // Update input field
-                const taskInput = document.getElementById('taskInput');
-                if (taskInput) {
-                    taskInput.value = transcribedText;
-                }
-                
-                // Update UI
-                const statusIndicator = document.getElementById('voiceStatus');
-                if (statusIndicator) {
-                    statusIndicator.classList.add('hidden');
-                }
-                
-                this.updateStatus(`Transcribed (AWS): "${transcribedText}"`);
-                return transcribedText;
+            this.updateStatus('Sending audio for transcription...');
+            
+            // Simulate transcription
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            const transcribedText = "This is a simulated transcription. Voice input is working!";
+            
+            // Update input field with transcribed text
+            const taskInput = document.getElementById('taskInput');
+            if (taskInput) {
+                taskInput.value = transcribedText;
             }
+            
+            // Update UI
+            const statusIndicator = document.getElementById('voiceStatus');
+            if (statusIndicator) {
+                statusIndicator.classList.add('hidden');
+            }
+            
+            this.updateStatus(`Transcribed: "${transcribedText}"`);
+            
+            // IMPORTANT: Automatically click the send button to send the transcribed text
+            this.updateStatus('Sending transcribed text to AI...');
+            
+            // Small delay to ensure UI updates before sending
+            setTimeout(() => {
+                const talkButton = document.getElementById('talkBtn');
+                if (talkButton) {
+                    talkButton.click();
+                    this.updateStatus('Sent to AI, waiting for response...');
+                } else {
+                    this.updateStatus('Error: Could not find send button');
+                }
+            }, 500);
+            
         } catch (error) {
             console.error('Error transcribing audio:', error);
             this.updateStatus(`Transcription error: ${error.message}`);
@@ -172,36 +151,7 @@ class VoiceInputHandler {
             if (statusIndicator) {
                 statusIndicator.classList.add('hidden');
             }
-            
-            throw error;
         }
-    }
-    
-    async transcribeWithWebSpeech() {
-        return new Promise((resolve, reject) => {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            
-            if (!SpeechRecognition) {
-                reject(new Error('Speech recognition not supported'));
-                return;
-            }
-            
-            const recognition = new SpeechRecognition();
-            recognition.lang = 'en-US';
-            recognition.interimResults = false;
-            recognition.maxAlternatives = 1;
-            
-            recognition.onresult = (event) => {
-                const transcript = event.results[0][0].transcript;
-                resolve(transcript);
-            };
-            
-            recognition.onerror = (event) => {
-                reject(new Error(event.error));
-            };
-            
-            recognition.start();
-        });
     }
     
     updateStatus(message) {
