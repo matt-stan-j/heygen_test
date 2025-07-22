@@ -109,26 +109,13 @@ class VoiceInputHandler {
         }
     }
     
+    // Simplified voice-input.js
     async transcribeAudio(audioBlob) {
         try {
             this.updateStatus('Sending audio for transcription...');
             
-            // Send audio to AWS Transcribe API
-            const response = await fetch('https://x4p585jeee.execute-api.ap-southeast-1.amazonaws.com/prod/transcribe', {
-                method: 'POST',
-                body: audioBlob
-            });
-            
-            if (!response.ok) {
-                throw new Error(`Transcription failed: ${response.status}`);
-            }
-            
-            const result = await response.json();
-            const transcribedText = result.transcript || "";
-            
-            if (!transcribedText) {
-                throw new Error("No transcription returned");
-            }
+            // Use a simulated transcription for now
+            const transcribedText = "Tell me about Luke Skywalker.";
             
             // Update input field with transcribed text
             const taskInput = document.getElementById('taskInput');
