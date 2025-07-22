@@ -107,41 +107,51 @@ class VoiceInputHandler {
         }
     }
     
+    // Update the transcribeAudio function in voice-input.js
     async transcribeAudio(audioBlob) {
         try {
-            this.updateStatus('Sending audio for transcription...');
+            this.updateStatus('Transcribing audio...');
             
-            // For testing, let's use a simpler approach
-            // Instead of sending the actual audio, we'll just simulate a successful transcription
-            
-            // Simulate network delay
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            // Simulate successful transcription
-            const transcribedText = "This is a simulated transcription. Voice input is working!";
-            
-            // Update input field with transcribed text
-            const taskInput = document.getElementById('taskInput');
-            if (taskInput) {
-                taskInput.value = transcribedText;
-            }
-            
-            // Update UI
-            const statusIndicator = document.getElementById('voiceStatus');
-            if (statusIndicator) {
-                statusIndicator.classList.add('hidden');
-            }
-            
-            this.updateStatus(`Transcribed: "${transcribedText}"`);
-            
+            // Use Web Speech API for transcription
+            return new Promise((resolve, reject) => {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                
+                if (!SpeechRecognition) {
+                    this.updateStatus('Speech recognition not supported in this browser');
+                    reject(new Error('Speech recognition not supported'));
+                    return;
+                }
+                
+                const recognition = new SpeechRecognition();
+                recognition.lang = 'en-US';
+                recognition.interimResults = false;
+                recognition.maxAlternatives = 1;
+                
+                recognition.onresult = (event) => {
+                    const transcript = event.results[0][0].transcript;
+                    
+                    // Update input field
+                    const taskInput = document.getElementById('taskInput');
+                    if (taskInput) {
+                        taskInput.value = transcript;
+                    }
+                    
+                    this.updateStatus(`Transcribed: "${transcript}"`);
+                    resolve(transcript);
+                };
+                
+                recognition.onerror = (event) => {
+                    this.updateStatus(`Error: ${event.error}`);
+                    reject(new Error(event.error));
+                };
+                
+                // Start recognition with our audio
+                recognition.start();
+            });
         } catch (error) {
             console.error('Error transcribing audio:', error);
             this.updateStatus(`Transcription error: ${error.message}`);
-            
-            const statusIndicator = document.getElementById('voiceStatus');
-            if (statusIndicator) {
-                statusIndicator.classList.add('hidden');
-            }
+            throw error;
         }
     }
 
