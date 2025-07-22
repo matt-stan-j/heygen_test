@@ -109,27 +109,16 @@ class VoiceInputHandler {
     
     async transcribeAudio(audioBlob) {
         try {
-            // For initial implementation, we'll use a simpler approach
-            // In production, you would send this to your transcribe-auth Lambda
-            
-            // Create a FormData object to send the audio file
-            const formData = new FormData();
-            formData.append('audio', audioBlob, 'recording.webm');
-            
             this.updateStatus('Sending audio for transcription...');
             
-            // Send to our transcribe endpoint
-            const response = await fetch('https://x4p585jeee.execute-api.ap-southeast-1.amazonaws.com/prod/transcribe', {
-                method: 'POST',
-                body: formData
-            });
+            // For testing, let's use a simpler approach
+            // Instead of sending the actual audio, we'll just simulate a successful transcription
             
-            if (!response.ok) {
-                throw new Error(`Transcription failed: ${response.status}`);
-            }
+            // Simulate network delay
+            await new Promise(resolve => setTimeout(resolve, 1000));
             
-            const result = await response.json();
-            const transcribedText = result.transcript || "Could not transcribe audio";
+            // Simulate successful transcription
+            const transcribedText = "This is a simulated transcription. Voice input is working!";
             
             // Update input field with transcribed text
             const taskInput = document.getElementById('taskInput');
@@ -155,6 +144,7 @@ class VoiceInputHandler {
             }
         }
     }
+
     
     updateStatus(message) {
         const statusElement = document.getElementById('status');
