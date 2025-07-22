@@ -53,14 +53,16 @@ class VoiceInputHandler {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             
             this.audioChunks = [];
-            this.mediaRecorder = new MediaRecorder(stream);
+            this.mediaRecorder = new MediaRecorder(stream, {
+                mimeType: 'audio/webm'
+            });
             
             this.mediaRecorder.addEventListener('dataavailable', event => {
                 this.audioChunks.push(event.data);
             });
             
             this.mediaRecorder.addEventListener('stop', async () => {
-                const audioBlob = new Blob(this.audioChunks);
+                const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
                 await this.transcribeAudio(audioBlob);
                 
                 // Stop all tracks to release microphone
@@ -111,9 +113,22 @@ class VoiceInputHandler {
         try {
             this.updateStatus('Sending audio for transcription...');
             
-            // Simulate transcription
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const transcribedText = "This is a simulated transcription. Voice input is working!";
+            // Send audio to AWS Transcribe API
+            const response = await fetch('https://x4p585jeee.execute-api.ap-southeast-1.amazonaws.com/prod/transcribe', {
+                method: 'POST',
+                body: audioBlob
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Transcription failed: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            const transcribedText = result.transcript || "";
+            
+            if (!transcribedText) {
+                throw new Error("No transcription returned");
+            }
             
             // Update input field with transcribed text
             const taskInput = document.getElementById('taskInput');
@@ -129,19 +144,8 @@ class VoiceInputHandler {
             
             this.updateStatus(`Transcribed: "${transcribedText}"`);
             
-            // IMPORTANT: Automatically click the send button to send the transcribed text
-            this.updateStatus('Sending transcribed text to AI...');
-            
-            // Small delay to ensure UI updates before sending
-            setTimeout(() => {
-                const talkButton = document.getElementById('talkBtn');
-                if (talkButton) {
-                    talkButton.click();
-                    this.updateStatus('Sent to AI, waiting for response...');
-                } else {
-                    this.updateStatus('Error: Could not find send button');
-                }
-            }, 500);
+            // Send to AI
+            this.sendTranscribedText();
             
         } catch (error) {
             console.error('Error transcribing audio:', error);
@@ -152,6 +156,29 @@ class VoiceInputHandler {
                 statusIndicator.classList.add('hidden');
             }
         }
+    }
+    
+    sendTranscribedText() {
+        this.updateStatus('Sending transcribed text to AI...');
+        
+        // Small delay to ensure UI updates before sending
+        setTimeout(() => {
+            const talkBtn = document.getElementById('talkBtn');
+            if (talkBtn) {
+                // Try multiple methods to trigger the click
+                try {
+                    // Method 1: Direct click
+                    talkBtn.click();
+                    
+                    this.updateStatus('Sent to AI, waiting for response...');
+                } catch (error) {
+                    console.error('Error clicking button:', error);
+                    this.updateStatus(`Error sending to AI: ${error.message}`);
+                }
+            } else {
+                this.updateStatus('Error: Could not find send button');
+            }
+        }, 500);
     }
     
     updateStatus(message) {
