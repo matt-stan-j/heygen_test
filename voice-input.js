@@ -53,14 +53,16 @@ class VoiceInputHandler {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             
             this.audioChunks = [];
-            this.mediaRecorder = new MediaRecorder(stream);
+            this.mediaRecorder = new MediaRecorder(stream, {
+                mimeType: 'audio/webm'
+            });
             
             this.mediaRecorder.addEventListener('dataavailable', event => {
                 this.audioChunks.push(event.data);
             });
             
             this.mediaRecorder.addEventListener('stop', async () => {
-                const audioBlob = new Blob(this.audioChunks);
+                const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
                 await this.transcribeAudio(audioBlob);
                 
                 // Stop all tracks to release microphone
@@ -107,54 +109,100 @@ class VoiceInputHandler {
         }
     }
     
-    // Update the transcribeAudio function in voice-input.js
     async transcribeAudio(audioBlob) {
         try {
-            this.updateStatus('Transcribing audio...');
-            
-            // Use Web Speech API for transcription
-            return new Promise((resolve, reject) => {
-                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            // First try Web Speech API for faster results
+            try {
+                const transcript = await this.transcribeWithWebSpeech();
                 
-                if (!SpeechRecognition) {
-                    this.updateStatus('Speech recognition not supported in this browser');
-                    reject(new Error('Speech recognition not supported'));
-                    return;
+                // Update input field
+                const taskInput = document.getElementById('taskInput');
+                if (taskInput) {
+                    taskInput.value = transcript;
                 }
                 
-                const recognition = new SpeechRecognition();
-                recognition.lang = 'en-US';
-                recognition.interimResults = false;
-                recognition.maxAlternatives = 1;
+                // Update UI
+                const statusIndicator = document.getElementById('voiceStatus');
+                if (statusIndicator) {
+                    statusIndicator.classList.add('hidden');
+                }
                 
-                recognition.onresult = (event) => {
-                    const transcript = event.results[0][0].transcript;
-                    
-                    // Update input field
-                    const taskInput = document.getElementById('taskInput');
-                    if (taskInput) {
-                        taskInput.value = transcript;
-                    }
-                    
-                    this.updateStatus(`Transcribed: "${transcript}"`);
-                    resolve(transcript);
-                };
+                this.updateStatus(`Transcribed (Web Speech): "${transcript}"`);
+                return transcript;
+            } catch (webSpeechError) {
+                console.log('Web Speech API failed, falling back to AWS Transcribe');
+                this.updateStatus('Web Speech failed, using AWS Transcribe...');
                 
-                recognition.onerror = (event) => {
-                    this.updateStatus(`Error: ${event.error}`);
-                    reject(new Error(event.error));
-                };
+                // Fall back to AWS Transcribe
+                this.updateStatus('Sending audio to AWS Transcribe...');
                 
-                // Start recognition with our audio
-                recognition.start();
-            });
+                // Send the audio blob to our transcribe endpoint
+                const response = await fetch('https://x4p585jeee.execute-api.ap-southeast-1.amazonaws.com/prod/transcribe', {
+                    method: 'POST',
+                    body: audioBlob
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Transcription failed: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                const transcribedText = result.transcript || "Could not transcribe audio";
+                
+                // Update input field
+                const taskInput = document.getElementById('taskInput');
+                if (taskInput) {
+                    taskInput.value = transcribedText;
+                }
+                
+                // Update UI
+                const statusIndicator = document.getElementById('voiceStatus');
+                if (statusIndicator) {
+                    statusIndicator.classList.add('hidden');
+                }
+                
+                this.updateStatus(`Transcribed (AWS): "${transcribedText}"`);
+                return transcribedText;
+            }
         } catch (error) {
             console.error('Error transcribing audio:', error);
             this.updateStatus(`Transcription error: ${error.message}`);
+            
+            const statusIndicator = document.getElementById('voiceStatus');
+            if (statusIndicator) {
+                statusIndicator.classList.add('hidden');
+            }
+            
             throw error;
         }
     }
-
+    
+    async transcribeWithWebSpeech() {
+        return new Promise((resolve, reject) => {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            
+            if (!SpeechRecognition) {
+                reject(new Error('Speech recognition not supported'));
+                return;
+            }
+            
+            const recognition = new SpeechRecognition();
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+            
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                resolve(transcript);
+            };
+            
+            recognition.onerror = (event) => {
+                reject(new Error(event.error));
+            };
+            
+            recognition.start();
+        });
+    }
     
     updateStatus(message) {
         const statusElement = document.getElementById('status');
