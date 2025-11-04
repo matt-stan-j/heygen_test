@@ -152,6 +152,9 @@ class HeyGenAvatarApp {
             await this.room.connect(sessionData.url, sessionData.access_token);
             this.updateStatus('LiveKit connection established!');
             
+            // Set up WebSocket for avatar events
+            this.setupWebSocket(sessionData);
+            
         } catch (error) {
             console.error('LiveKit connection error:', error);
             this.updateStatus('Video connection failed, but audio should work');
@@ -171,6 +174,38 @@ class HeyGenAvatarApp {
                     <div id="speakingIndicator" style="font-size: 14px; margin-top: 10px; opacity: 0;">🎤 Speaking...</div>
                 </div>
             `;
+        }
+    }
+
+    setupWebSocket(sessionData) {
+        try {
+            // Create WebSocket connection to monitor avatar events
+            const wsUrl = `wss://api.heygen.com/v1/ws/streaming.chat?session_id=${this.sessionId}&session_token=${sessionData.access_token}&silence_response=false`;
+            
+            this.webSocket = new WebSocket(wsUrl);
+            
+            this.webSocket.onopen = () => {
+                console.log('WebSocket connected');
+                this.updateStatus('Avatar WebSocket connected');
+            };
+            
+            this.webSocket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                console.log('Avatar event:', data);
+                
+                if (data.type === 'avatar_start_talking') {
+                    this.updateStatus('🎤 Avatar started talking');
+                } else if (data.type === 'avatar_stop_talking') {
+                    this.updateStatus('🔇 Avatar stopped talking');
+                }
+            };
+            
+            this.webSocket.onerror = (error) => {
+                console.log('WebSocket error:', error);
+            };
+            
+        } catch (error) {
+            console.log('WebSocket setup failed:', error);
         }
     }
 
@@ -237,7 +272,15 @@ class HeyGenAvatarApp {
                 
                 const speakResult = await speakResponse.json();
                 console.log('Speak result:', speakResult);
-                this.updateStatus('Avatar is speaking...');
+                
+                if (speakResult.code === 100) {
+                    this.updateStatus('Avatar is speaking...');
+                    if (speakResult.data && speakResult.data.task_id) {
+                        this.updateStatus(`Task ID: ${speakResult.data.task_id}`);
+                    }
+                } else {
+                    this.updateStatus(`Speak failed: ${speakResult.message || 'Unknown error'}`);
+                }
                 
                 // Show speaking indicator
                 const indicator = document.getElementById('speakingIndicator');
@@ -280,7 +323,12 @@ class HeyGenAvatarApp {
             const result = await response.json();
             console.log('Close result:', result);
             
-            // Clean up LiveKit connection
+            // Clean up connections
+            if (this.webSocket) {
+                this.webSocket.close();
+                this.webSocket = null;
+            }
+            
             if (this.room) {
                 this.room.disconnect();
                 this.room = null;
