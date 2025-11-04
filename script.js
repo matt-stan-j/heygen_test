@@ -68,20 +68,16 @@ class HeyGenAWS {
             // Check if HeyGen SDK is available
             console.log('Available HeyGen objects:', Object.keys(window).filter(k => k.toLowerCase().includes('heygen') || k.toLowerCase().includes('stream')));
             
-            // Try different possible SDK object names
-            let StreamingAvatar, StreamingEvents;
-            if (window.HeyGenStreamingAvatar) {
-                StreamingAvatar = window.HeyGenStreamingAvatar.StreamingAvatar;
-                StreamingEvents = window.HeyGenStreamingAvatar.StreamingEvents;
-            } else if (window.StreamingAvatar) {
-                StreamingAvatar = window.StreamingAvatar;
-                StreamingEvents = window.StreamingEvents;
-            } else {
+            // Initialize avatar with HeyGen SDK v2.1.0
+            this.updateStatus('Initializing avatar...');
+            
+            // Import from the global HeyGen module
+            const { StreamingAvatar, AvatarQuality, StreamingEvents } = window.HeyGenStreamingAvatar || window;
+            
+            if (!StreamingAvatar) {
                 throw new Error('HeyGen SDK not loaded properly');
             }
             
-            // Initialize avatar
-            this.updateStatus('Initializing avatar...');
             this.avatar = new StreamingAvatar({ token: accessToken });
             
             // Set up event listeners
@@ -98,11 +94,22 @@ class HeyGenAWS {
                 };
             });
             
-            // Start avatar
+            this.avatar.on(StreamingEvents.AVATAR_START_TALKING, () => {
+                this.updateStatus('Avatar is speaking...');
+            });
+            
+            this.avatar.on(StreamingEvents.AVATAR_STOP_TALKING, () => {
+                this.updateStatus('Avatar finished speaking');
+            });
+            
+            // Start avatar with v2.1.0 API
             await this.avatar.createStartAvatar({
-                quality: 'low',
+                quality: AvatarQuality.Low,
                 avatarName: document.getElementById('avatarID').value || 'Wayne_20240711',
-                voice: { rate: 1.0, emotion: 'EXCITED' },
+                voice: {
+                    rate: 1.0,
+                    emotion: 'EXCITED'
+                },
                 language: 'en'
             });
             
@@ -179,11 +186,10 @@ class HeyGenAWS {
             
             this.updateStatus(`AI: ${botMessage}`);
 
-            // Make avatar speak
+            // Make avatar speak using v2.1.0 API
             if (this.avatar && this.avatarReady && botMessage) {
                 await this.avatar.speak({
-                    text: botMessage,
-                    task_type: 'repeat'
+                    text: botMessage
                 });
             }
 
