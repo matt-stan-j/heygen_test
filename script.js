@@ -1,5 +1,3 @@
-import { StreamingAvatar, AvatarQuality, StreamingEvents, TaskType } from 'https://unpkg.com/@heygen/streaming-avatar@2.1.0/dist/index.esm.js';
-
 class HeyGenAvatarApp {
     constructor() {
         this.avatar = null;
@@ -67,8 +65,14 @@ class HeyGenAvatarApp {
             // Get access token from AWS backend
             const accessToken = await this.fetchAccessToken();
             
-            // Initialize StreamingAvatar
+            // Initialize StreamingAvatar from global UMD
             this.updateStatus('Initializing avatar...');
+            const { StreamingAvatar, AvatarQuality, StreamingEvents, TaskType } = window.HeyGenStreamingAvatar || window;
+            
+            if (!StreamingAvatar) {
+                throw new Error('HeyGen SDK not loaded');
+            }
+            
             this.avatar = new StreamingAvatar({ token: accessToken });
             
             // Set up event listeners
@@ -78,7 +82,7 @@ class HeyGenAvatarApp {
             this.updateStatus('Starting avatar session...');
             const sessionData = await this.avatar.createStartAvatar({
                 avatarName: document.getElementById('avatarID').value || 'Wayne_20240711',
-                quality: AvatarQuality.Low,
+                quality: AvatarQuality?.Low || 'low',
                 voice: {
                     rate: 1.0,
                     emotion: 'EXCITED'
@@ -97,7 +101,9 @@ class HeyGenAvatarApp {
     }
 
     setupEventListeners() {
-        this.avatar.on(StreamingEvents.STREAM_READY, (event) => {
+        const { StreamingEvents, TaskType } = window.HeyGenStreamingAvatar || window;
+        
+        this.avatar.on(StreamingEvents?.STREAM_READY || 'STREAM_READY', (event) => {
             console.log('Stream ready:', event.detail);
             this.updateStatus('Avatar stream ready!');
             
@@ -111,15 +117,15 @@ class HeyGenAvatarApp {
             };
         });
 
-        this.avatar.on(StreamingEvents.AVATAR_START_TALKING, () => {
+        this.avatar.on(StreamingEvents?.AVATAR_START_TALKING || 'AVATAR_START_TALKING', () => {
             this.updateStatus('Avatar is speaking...');
         });
 
-        this.avatar.on(StreamingEvents.AVATAR_STOP_TALKING, () => {
+        this.avatar.on(StreamingEvents?.AVATAR_STOP_TALKING || 'AVATAR_STOP_TALKING', () => {
             this.updateStatus('Avatar finished speaking');
         });
 
-        this.avatar.on(StreamingEvents.STREAM_DISCONNECTED, () => {
+        this.avatar.on(StreamingEvents?.STREAM_DISCONNECTED || 'STREAM_DISCONNECTED', () => {
             this.updateStatus('Stream disconnected');
             this.isAvatarReady = false;
             document.getElementById('startBtn').disabled = false;
@@ -172,9 +178,10 @@ class HeyGenAvatarApp {
 
             // Make avatar speak the AI response
             if (this.avatar && this.isAvatarReady && botMessage) {
+                const { TaskType } = window.HeyGenStreamingAvatar || window;
                 await this.avatar.speak({
                     text: botMessage,
-                    taskType: TaskType.REPEAT
+                    taskType: TaskType?.REPEAT || 'REPEAT'
                 });
             }
 
