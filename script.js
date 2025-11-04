@@ -56,8 +56,27 @@ class HeyGenAvatarApp {
             
             if (sessionData.data && sessionData.data.session_id) {
                 this.sessionId = sessionData.data.session_id;
-                this.isSessionActive = true;
                 this.updateStatus(`Session created! ID: ${this.sessionId}`);
+                
+                // Start the session to put it in correct state
+                this.updateStatus('Starting session...');
+                const startResponse = await fetch(`${this.AWS_API_URL}/heygen/create`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Origin': window.location.origin
+                    },
+                    mode: 'cors',
+                    body: JSON.stringify({ 
+                        action: 'start',
+                        session_id: this.sessionId 
+                    })
+                });
+                
+                const startData = await startResponse.json();
+                console.log('Start data:', startData);
+                
+                this.isSessionActive = true;
                 
                 // Set up WebRTC connection if available
                 if (sessionData.data.url) {
