@@ -99,17 +99,38 @@ class HeyGenAvatarApp {
         try {
             this.updateStatus('Setting up LiveKit connection...');
             
-            // For now, just log the connection details
             console.log('LiveKit URL:', sessionData.url);
             console.log('Access Token:', sessionData.access_token?.substring(0, 20) + '...');
             
-            // The actual LiveKit connection would be handled by the HeyGen SDK
-            // For direct API usage, we might need to implement LiveKit client
-            this.updateStatus('Connection details received');
+            // Connect to LiveKit room
+            this.room = new LiveKit.Room();
+            
+            // Handle incoming video tracks
+            this.room.on(LiveKit.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                console.log('Track subscribed:', track.kind, participant.identity);
+                if (track.kind === 'video') {
+                    const videoElement = document.getElementById('videoElement');
+                    track.attach(videoElement);
+                    this.updateStatus('Avatar video connected!');
+                }
+            });
+            
+            this.room.on(LiveKit.RoomEvent.Connected, () => {
+                console.log('Connected to LiveKit room');
+                this.updateStatus('Connected to avatar room');
+            });
+            
+            this.room.on(LiveKit.RoomEvent.Disconnected, () => {
+                console.log('Disconnected from LiveKit room');
+                this.updateStatus('Disconnected from avatar room');
+            });
+            
+            // Connect to the room
+            await this.room.connect(sessionData.url, sessionData.access_token);
             
         } catch (error) {
-            console.error('Connection setup error:', error);
-            this.updateStatus('Connection setup failed, but session is active');
+            console.error('LiveKit connection error:', error);
+            this.updateStatus('Video connection failed, but audio should work');
         }
     }
 
@@ -210,10 +231,10 @@ class HeyGenAvatarApp {
             const result = await response.json();
             console.log('Close result:', result);
             
-            // Clean up
-            if (this.pc) {
-                this.pc.close();
-                this.pc = null;
+            // Clean up LiveKit connection
+            if (this.room) {
+                await this.room.disconnect();
+                this.room = null;
             }
             
             this.sessionId = null;
