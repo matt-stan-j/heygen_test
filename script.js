@@ -67,26 +67,26 @@ class HeyGenAWS {
             
             // Initialize avatar with HeyGen SDK
             this.updateStatus('Initializing avatar...');
-            this.avatar = new StreamingAvatar({ token: accessToken });
+            this.avatar = new window.StreamingAvatar({ token: accessToken });
             
             // Set up event listeners
-            this.avatar.on(StreamingEvents.AVATAR_START_TALKING, (e) => {
+            this.avatar.on(window.StreamingEvents.AVATAR_START_TALKING, (e) => {
                 console.log('Avatar started talking', e);
                 this.updateStatus('Avatar is speaking...');
             });
             
-            this.avatar.on(StreamingEvents.AVATAR_STOP_TALKING, (e) => {
+            this.avatar.on(window.StreamingEvents.AVATAR_STOP_TALKING, (e) => {
                 console.log('Avatar stopped talking', e);
                 this.updateStatus('Avatar finished speaking');
             });
             
-            this.avatar.on(StreamingEvents.STREAM_DISCONNECTED, () => {
+            this.avatar.on(window.StreamingEvents.STREAM_DISCONNECTED, () => {
                 console.log('Stream disconnected');
                 this.updateStatus('Stream disconnected');
                 this.avatarReady = false;
             });
             
-            this.avatar.on(StreamingEvents.STREAM_READY, (event) => {
+            this.avatar.on(window.StreamingEvents.STREAM_READY, (event) => {
                 console.log('Stream ready:', event.detail);
                 this.updateStatus('Avatar stream ready!');
                 
