@@ -5,6 +5,7 @@ class HeyGenAWS {
         this.mediaStream = null;
         this.sessionToken = null;
         this.chatSessionId = this.generateUUID();
+        this.videoReady = false;
         
         // Replace with your API Gateway URL
         this.AWS_API_URL = 'https://x4p585jeee.execute-api.ap-southeast-1.amazonaws.com/prod';
@@ -53,6 +54,7 @@ class HeyGenAWS {
         try {
             this.updateStatus('Creating HeyGen session...');
             document.getElementById('startBtn').disabled = true;
+            this.videoReady = false;
             
             // Call AWS Lambda to create HeyGen session
             const response = await fetch(`${this.AWS_API_URL}/heygen/create`, {
@@ -117,11 +119,18 @@ class HeyGenAWS {
                 console.log("Track subscribed:", track.kind);
                 if (track.kind === 'video' || track.kind === 'audio') {
                     this.mediaStream.addTrack(track.mediaStreamTrack);
-                    if (this.mediaStream.getVideoTracks().length > 0) {
+                    if (track.kind === 'video') {
                         document.getElementById('mediaElement').srcObject = this.mediaStream;
                         this.updateStatus('Video stream connected');
+                        // Set a flag that video is ready
+                        this.videoReady = true;
                     }
                 }
+            });
+            
+            this.room.on(LivekitClient.RoomEvent.Connected, () => {
+                console.log('LiveKit room connected');
+                this.updateStatus('LiveKit room connected');
             });
 
             await this.room.prepareConnection(this.sessionInfo.url, this.sessionInfo.access_token);
@@ -141,8 +150,16 @@ class HeyGenAWS {
             await this.room.connect(this.sessionInfo.url, this.sessionInfo.access_token);
             this.updateStatus('LiveKit connected');
             
-            // Add a small delay to ensure connection is stable
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Wait for video track to be available
+            let attempts = 0;
+            while (!this.videoReady && attempts < 20) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+                attempts++;
+            }
+            
+            if (!this.videoReady) {
+                this.updateStatus('Warning: Video not ready, but continuing...');
+            }
             
             // Then start the HeyGen session
             const startResponse = await fetch(`${this.AWS_API_URL}/heygen/start`, {
@@ -160,6 +177,9 @@ class HeyGenAWS {
             
             const startData = await startResponse.json();
             console.log("Start streaming response:", startData);
+            
+            // Additional wait for session to be fully ready
+            await new Promise(resolve => setTimeout(resolve, 2000));
             
             this.updateStatus('Streaming started');
         } catch (error) {
@@ -252,6 +272,11 @@ class HeyGenAWS {
                 success = speakData.success;
             }
             
+            // Also check if there's an error in the response
+            if (speakData.error) {
+                throw new Error(speakData.error);
+            }
+            
             if (success) {
                 this.updateStatus('Avatar speaking request sent');
             } else {
@@ -315,4 +340,3 @@ class HeyGenAWS {
 document.addEventListener('DOMContentLoaded', () => {
     window.heygenAWS = new HeyGenAWS();
 });
-
