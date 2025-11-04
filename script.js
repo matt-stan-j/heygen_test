@@ -71,10 +71,29 @@ class HeyGenAWS {
             // Initialize avatar with HeyGen SDK v2.1.0
             this.updateStatus('Initializing avatar...');
             
-            // Import from the global HeyGen module
-            const { StreamingAvatar, AvatarQuality, StreamingEvents } = window.HeyGenStreamingAvatar || window;
+            // Try different ways the SDK might be exported
+            let StreamingAvatar, AvatarQuality, StreamingEvents;
             
-            if (!StreamingAvatar) {
+            if (window.StreamingAvatar) {
+                // Direct global export
+                StreamingAvatar = window.StreamingAvatar;
+                AvatarQuality = window.AvatarQuality || { Low: 'low' };
+                StreamingEvents = window.StreamingEvents || {
+                    STREAM_READY: 'STREAM_READY',
+                    AVATAR_START_TALKING: 'AVATAR_START_TALKING',
+                    AVATAR_STOP_TALKING: 'AVATAR_STOP_TALKING'
+                };
+            } else if (window.HeyGenStreamingAvatar) {
+                // Module export
+                const module = window.HeyGenStreamingAvatar;
+                StreamingAvatar = module.StreamingAvatar || module.default;
+                AvatarQuality = module.AvatarQuality || { Low: 'low' };
+                StreamingEvents = module.StreamingEvents || {
+                    STREAM_READY: 'STREAM_READY',
+                    AVATAR_START_TALKING: 'AVATAR_START_TALKING',
+                    AVATAR_STOP_TALKING: 'AVATAR_STOP_TALKING'
+                };
+            } else {
                 throw new Error('HeyGen SDK not loaded properly');
             }
             
@@ -104,7 +123,7 @@ class HeyGenAWS {
             
             // Start avatar with v2.1.0 API
             await this.avatar.createStartAvatar({
-                quality: AvatarQuality.Low,
+                quality: AvatarQuality.Low || 'low',
                 avatarName: document.getElementById('avatarID').value || 'Wayne_20240711',
                 voice: {
                     rate: 1.0,
