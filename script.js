@@ -7,6 +7,12 @@ class HeyGenAWS {
         // Replace with your API Gateway URL
         this.AWS_API_URL = 'https://x4p585jeee.execute-api.ap-southeast-1.amazonaws.com/prod';
         
+        // Debug: Check what's available
+        console.log('All window objects with Stream/HeyGen:', Object.keys(window).filter(k => k.toLowerCase().includes('stream') || k.toLowerCase().includes('heygen')));
+        console.log('window.StreamingAvatar:', typeof window.StreamingAvatar);
+        console.log('window.HeyGenStreamingAvatar:', typeof window.HeyGenStreamingAvatar);
+        console.log('window.StreamingEvents:', typeof window.StreamingEvents);
+        
         this.initializeEventListeners();
         this.updateStatus('Ready to start');
     }
@@ -67,26 +73,26 @@ class HeyGenAWS {
             
             // Initialize avatar with HeyGen SDK
             this.updateStatus('Initializing avatar...');
-            this.avatar = new window.StreamingAvatar({ token: accessToken });
+            this.avatar = new window.HeyGenStreamingAvatar.StreamingAvatar({ token: accessToken });
             
             // Set up event listeners
-            this.avatar.on(window.StreamingEvents.AVATAR_START_TALKING, (e) => {
+            this.avatar.on(window.HeyGenStreamingAvatar.StreamingEvents.AVATAR_START_TALKING, (e) => {
                 console.log('Avatar started talking', e);
                 this.updateStatus('Avatar is speaking...');
             });
             
-            this.avatar.on(window.StreamingEvents.AVATAR_STOP_TALKING, (e) => {
+            this.avatar.on(window.HeyGenStreamingAvatar.StreamingEvents.AVATAR_STOP_TALKING, (e) => {
                 console.log('Avatar stopped talking', e);
                 this.updateStatus('Avatar finished speaking');
             });
             
-            this.avatar.on(window.StreamingEvents.STREAM_DISCONNECTED, () => {
+            this.avatar.on(window.HeyGenStreamingAvatar.StreamingEvents.STREAM_DISCONNECTED, () => {
                 console.log('Stream disconnected');
                 this.updateStatus('Stream disconnected');
                 this.avatarReady = false;
             });
             
-            this.avatar.on(window.StreamingEvents.STREAM_READY, (event) => {
+            this.avatar.on(window.HeyGenStreamingAvatar.StreamingEvents.STREAM_READY, (event) => {
                 console.log('Stream ready:', event.detail);
                 this.updateStatus('Avatar stream ready!');
                 
