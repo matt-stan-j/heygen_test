@@ -65,12 +65,35 @@ class HeyGenAvatarApp {
             // Get access token from AWS backend
             const accessToken = await this.fetchAccessToken();
             
+            // Debug: Check what's available
+            console.log('Available window objects:', Object.keys(window).filter(k => k.toLowerCase().includes('heygen') || k.toLowerCase().includes('stream')));
+            console.log('window.StreamingAvatar:', typeof window.StreamingAvatar);
+            console.log('window.HeyGenStreamingAvatar:', typeof window.HeyGenStreamingAvatar);
+            
             // Initialize StreamingAvatar from global UMD
             this.updateStatus('Initializing avatar...');
-            const { StreamingAvatar, AvatarQuality, StreamingEvents, TaskType } = window.HeyGenStreamingAvatar || window;
+            
+            // Try multiple ways to access the SDK
+            let StreamingAvatar, AvatarQuality, StreamingEvents, TaskType;
+            
+            if (window.StreamingAvatar) {
+                StreamingAvatar = window.StreamingAvatar;
+                AvatarQuality = window.AvatarQuality;
+                StreamingEvents = window.StreamingEvents;
+                TaskType = window.TaskType;
+            } else if (window.HeyGenStreamingAvatar) {
+                const sdk = window.HeyGenStreamingAvatar;
+                StreamingAvatar = sdk.StreamingAvatar || sdk.default;
+                AvatarQuality = sdk.AvatarQuality;
+                StreamingEvents = sdk.StreamingEvents;
+                TaskType = sdk.TaskType;
+            } else {
+                // Fallback - try to use any available constructor
+                StreamingAvatar = window.StreamingAvatar || window.HeyGenStreamingAvatar;
+            }
             
             if (!StreamingAvatar) {
-                throw new Error('HeyGen SDK not loaded');
+                throw new Error('HeyGen SDK not loaded - no StreamingAvatar constructor found');
             }
             
             this.avatar = new StreamingAvatar({ token: accessToken });
@@ -81,7 +104,7 @@ class HeyGenAvatarApp {
             // Start avatar session
             this.updateStatus('Starting avatar session...');
             const sessionData = await this.avatar.createStartAvatar({
-                avatarName: document.getElementById('avatarID').value || 'Wayne_20240711',
+                avatarName: document.getElementById('avatarID').value || 'default',
                 quality: AvatarQuality?.Low || 'low',
                 voice: {
                     rate: 1.0,
@@ -101,7 +124,13 @@ class HeyGenAvatarApp {
     }
 
     setupEventListeners() {
-        const { StreamingEvents, TaskType } = window.HeyGenStreamingAvatar || window;
+        // Use fallback event names if enums not available
+        const StreamingEvents = window.StreamingEvents || window.HeyGenStreamingAvatar?.StreamingEvents || {
+            STREAM_READY: 'STREAM_READY',
+            AVATAR_START_TALKING: 'AVATAR_START_TALKING', 
+            AVATAR_STOP_TALKING: 'AVATAR_STOP_TALKING',
+            STREAM_DISCONNECTED: 'STREAM_DISCONNECTED'
+        };
         
         this.avatar.on(StreamingEvents?.STREAM_READY || 'STREAM_READY', (event) => {
             console.log('Stream ready:', event.detail);
@@ -178,10 +207,9 @@ class HeyGenAvatarApp {
 
             // Make avatar speak the AI response
             if (this.avatar && this.isAvatarReady && botMessage) {
-                const { TaskType } = window.HeyGenStreamingAvatar || window;
                 await this.avatar.speak({
                     text: botMessage,
-                    taskType: TaskType?.REPEAT || 'REPEAT'
+                    taskType: 'REPEAT'
                 });
             }
 
