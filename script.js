@@ -116,7 +116,13 @@ class HeyGenAvatarApp {
                 },
             });
             
-            // Handle media streams
+            // Handle room events (from official example)
+            this.room.on(LivekitClient.RoomEvent.DataReceived, (message) => {
+                const data = new TextDecoder().decode(message);
+                console.log('Room message:', JSON.parse(data));
+            });
+
+            // Handle media streams (from official example)
             this.mediaStream = new MediaStream();
             const videoElement = document.getElementById('videoElement');
             
@@ -124,9 +130,11 @@ class HeyGenAvatarApp {
                 console.log('Track subscribed:', track.kind);
                 if (track.kind === 'video' || track.kind === 'audio') {
                     this.mediaStream.addTrack(track.mediaStreamTrack);
-                    if (this.mediaStream.getVideoTracks().length > 0) {
+                    // Wait for both video AND audio tracks like official example
+                    if (this.mediaStream.getVideoTracks().length > 0 && 
+                        this.mediaStream.getAudioTracks().length > 0) {
                         videoElement.srcObject = this.mediaStream;
-                        this.updateStatus('Avatar video connected!');
+                        this.updateStatus('Media stream ready');
                     }
                 }
             });
@@ -140,40 +148,28 @@ class HeyGenAvatarApp {
             
             this.room.on(LivekitClient.RoomEvent.Connected, () => {
                 console.log('Connected to LiveKit room');
-                this.updateStatus('Connected to avatar room');
+                this.updateStatus('Connected to room');
             });
             
             this.room.on(LivekitClient.RoomEvent.Disconnected, (reason) => {
                 console.log('Disconnected from LiveKit room:', reason);
-                this.updateStatus(`Disconnected: ${reason}`);
+                this.updateStatus(`Room disconnected: ${reason}`);
             });
             
-            // Connect to the room
+            // Use prepareConnection first (from official example)
+            await this.room.prepareConnection(sessionData.url, sessionData.access_token);
+            this.updateStatus('Connection prepared');
+            
+            // Set up WebSocket before connecting
+            this.setupWebSocket(sessionData);
+            
+            // Now connect to the room
             await this.room.connect(sessionData.url, sessionData.access_token);
             this.updateStatus('LiveKit connection established!');
-            
-            // Set up WebSocket for avatar events
-            this.setupWebSocket(sessionData);
             
         } catch (error) {
             console.error('LiveKit connection error:', error);
             this.updateStatus('Video connection failed, but audio should work');
-            
-            // Show fallback placeholder
-            const videoElement = document.getElementById('videoElement');
-            videoElement.style.backgroundColor = '#1e40af';
-            videoElement.style.display = 'flex';
-            videoElement.style.alignItems = 'center';
-            videoElement.style.justifyContent = 'center';
-            videoElement.style.color = 'white';
-            videoElement.innerHTML = `
-                <div style="text-align: center; padding: 20px;">
-                    <div style="font-size: 48px; margin-bottom: 10px;">🤖</div>
-                    <div>HeyGen Avatar Active</div>
-                    <div style="font-size: 14px; margin-top: 10px; opacity: 0.8;">Session: ${this.sessionId.substring(0, 8)}...</div>
-                    <div id="speakingIndicator" style="font-size: 14px; margin-top: 10px; opacity: 0;">🎤 Speaking...</div>
-                </div>
-            `;
         }
     }
 
