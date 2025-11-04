@@ -41,8 +41,8 @@ class HeyGenAvatarApp {
             this.updateStatus('Creating HeyGen session...');
             document.getElementById('startBtn').disabled = true;
             
-            // Create new session via AWS backend
-            const response = await fetch(`${this.AWS_API_URL}/heygen/new`, {
+            // Create new session via AWS backend (using create endpoint for now)
+            const response = await fetch(`${this.AWS_API_URL}/heygen/create`, {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
