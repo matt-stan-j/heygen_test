@@ -6,6 +6,7 @@ class HeyGenAWS {
         this.sessionToken = null;
         this.chatSessionId = this.generateUUID();
         this.videoReady = false;
+        this.avatarReady = false;
         
         // Replace with your API Gateway URL
         this.AWS_API_URL = 'https://x4p585jeee.execute-api.ap-southeast-1.amazonaws.com/prod';
@@ -55,6 +56,7 @@ class HeyGenAWS {
             this.updateStatus('Creating HeyGen session...');
             document.getElementById('startBtn').disabled = true;
             this.videoReady = false;
+            this.avatarReady = false;
             
             // Call AWS Lambda to create HeyGen session
             const response = await fetch(`${this.AWS_API_URL}/heygen/create`, {
@@ -166,6 +168,7 @@ class HeyGenAWS {
             // Additional wait for session to be fully ready for speak commands
             await new Promise(resolve => setTimeout(resolve, 5000));
             
+            this.avatarReady = true;
             this.updateStatus('Streaming started');
         } catch (error) {
             this.updateStatus(`Streaming error: ${error.message}`);
@@ -217,7 +220,11 @@ class HeyGenAWS {
 
             // Make avatar speak the AI response
             if (this.sessionInfo && botMessage) {
-                await this.makeAvatarSpeak(botMessage);
+                if (this.avatarReady) {
+                    await this.makeAvatarSpeak(botMessage);
+                } else {
+                    this.updateStatus('Avatar not ready yet, please wait...');
+                }
             }
 
         } catch (error) {
