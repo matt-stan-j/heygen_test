@@ -146,44 +146,25 @@ class HeyGenAWS {
         this.updateStatus('Starting streaming...');
         
         try {
-            // Start the HeyGen session first
-            const startResponse = await fetch(`${this.AWS_API_URL}/heygen/start`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Origin': window.location.origin
-                },
-                mode: 'cors',
-                body: JSON.stringify({
-                    session_id: this.sessionInfo.session_id,
-                    session_token: this.sessionToken
-                })
-            });
-            
-            const startData = await startResponse.json();
-            console.log("Start streaming response:", startData);
-            
-            if (startData.error) {
-                throw new Error(startData.error);
-            }
-            
-            // Then connect to LiveKit
+            // Connect to LiveKit - this automatically starts the session
             await this.room.connect(this.sessionInfo.url, this.sessionInfo.access_token);
             this.updateStatus('LiveKit connected');
             
             // Wait for video track to be available
             let attempts = 0;
-            while (!this.videoReady && attempts < 30) {
+            while (!this.videoReady && attempts < 40) {
                 await new Promise(resolve => setTimeout(resolve, 500));
                 attempts++;
             }
             
-            if (!this.videoReady) {
+            if (this.videoReady) {
+                this.updateStatus('Video stream ready');
+            } else {
                 this.updateStatus('Warning: Video not ready, but continuing...');
             }
             
-            // Additional wait for session to be fully ready
-            await new Promise(resolve => setTimeout(resolve, 3000));
+            // Additional wait for session to be fully ready for speak commands
+            await new Promise(resolve => setTimeout(resolve, 5000));
             
             this.updateStatus('Streaming started');
         } catch (error) {
