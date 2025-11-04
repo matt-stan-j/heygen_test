@@ -102,6 +102,12 @@ class HeyGenAvatarApp {
             console.log('LiveKit URL:', sessionData.url);
             console.log('Access Token:', sessionData.access_token?.substring(0, 20) + '...');
             
+            // Check if LiveKit is available
+            const LiveKit = window.LiveKitClient || window.LiveKit;
+            if (!LiveKit) {
+                throw new Error('LiveKit client not loaded');
+            }
+            
             // Connect to LiveKit room
             this.room = new LiveKit.Room();
             
