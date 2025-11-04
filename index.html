@@ -37,65 +37,7 @@
         <div id="status" class="p-2.5 bg-gray-50 border border-gray-300 rounded-md h-[100px] overflow-y-auto font-mono text-sm"></div>
     </div>
 
-    <script>
-        // Mock HeyGen SDK for testing - replace with real SDK when working
-        window.StreamingAvatar = class {
-            constructor(options) {
-                this.token = options.token;
-                this.events = {};
-            }
-            
-            on(event, callback) {
-                this.events[event] = callback;
-            }
-            
-            async createStartAvatar(config) {
-                console.log('Mock: Starting avatar with config:', config);
-                // Simulate stream ready event
-                setTimeout(() => {
-                    if (this.events['STREAM_READY']) {
-                        // Create a mock video stream
-                        const canvas = document.createElement('canvas');
-                        canvas.width = 640;
-                        canvas.height = 480;
-                        const ctx = canvas.getContext('2d');
-                        
-                        // Draw a simple avatar placeholder
-                        const drawFrame = () => {
-                            ctx.fillStyle = '#4A90E2';
-                            ctx.fillRect(0, 0, 640, 480);
-                            ctx.fillStyle = 'white';
-                            ctx.font = '24px Arial';
-                            ctx.textAlign = 'center';
-                            ctx.fillText('HeyGen Avatar Placeholder', 320, 240);
-                            ctx.fillText('Connected with token', 320, 280);
-                            ctx.fillText(new Date().toLocaleTimeString(), 320, 320);
-                            requestAnimationFrame(drawFrame);
-                        };
-                        drawFrame();
-                        
-                        const stream = canvas.captureStream(30);
-                        this.events['STREAM_READY']({ detail: stream });
-                    }
-                }, 2000);
-            }
-            
-            async speak(options) {
-                console.log('Mock: Avatar speaking:', options.text);
-                return { success: true };
-            }
-            
-            async stopAvatar() {
-                console.log('Mock: Stopping avatar');
-            }
-        };
-        
-        window.StreamingEvents = {
-            STREAM_READY: 'STREAM_READY',
-            AVATAR_START_TALKING: 'AVATAR_START_TALKING',
-            AVATAR_STOP_TALKING: 'AVATAR_STOP_TALKING'
-        };
-    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@heygen/streaming-avatar@2.1.0/lib/index.cjs.min.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
