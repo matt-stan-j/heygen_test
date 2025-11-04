@@ -41,7 +41,7 @@ class HeyGenAvatarApp {
             this.updateStatus('Creating HeyGen session...');
             document.getElementById('startBtn').disabled = true;
             
-            // Create new session via AWS backend (using create endpoint for now)
+            // Create new session via AWS backend
             const response = await fetch(`${this.AWS_API_URL}/heygen/create`, {
                 method: 'POST',
                 headers: { 
@@ -97,19 +97,72 @@ class HeyGenAvatarApp {
 
     async setupWebRTC(sessionData) {
         try {
-            this.updateStatus('Avatar connection established');
+            this.updateStatus('Setting up LiveKit connection...');
             
             console.log('LiveKit URL:', sessionData.url);
             console.log('Access Token:', sessionData.access_token?.substring(0, 20) + '...');
             
-            // Show avatar placeholder
+            // Check if LiveKit is available
+            if (typeof LivekitClient === 'undefined') {
+                throw new Error('LiveKit client not loaded');
+            }
+            
+            // Create LiveKit Room using official method
+            this.room = new LivekitClient.Room({
+                adaptiveStream: true,
+                dynacast: true,
+                videoCaptureDefaults: {
+                    resolution: LivekitClient.VideoPresets.h720.resolution,
+                },
+            });
+            
+            // Handle media streams
+            this.mediaStream = new MediaStream();
+            const videoElement = document.getElementById('videoElement');
+            
+            this.room.on(LivekitClient.RoomEvent.TrackSubscribed, (track) => {
+                console.log('Track subscribed:', track.kind);
+                if (track.kind === 'video' || track.kind === 'audio') {
+                    this.mediaStream.addTrack(track.mediaStreamTrack);
+                    if (this.mediaStream.getVideoTracks().length > 0) {
+                        videoElement.srcObject = this.mediaStream;
+                        this.updateStatus('Avatar video connected!');
+                    }
+                }
+            });
+            
+            this.room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track) => {
+                const mediaTrack = track.mediaStreamTrack;
+                if (mediaTrack) {
+                    this.mediaStream.removeTrack(mediaTrack);
+                }
+            });
+            
+            this.room.on(LivekitClient.RoomEvent.Connected, () => {
+                console.log('Connected to LiveKit room');
+                this.updateStatus('Connected to avatar room');
+            });
+            
+            this.room.on(LivekitClient.RoomEvent.Disconnected, (reason) => {
+                console.log('Disconnected from LiveKit room:', reason);
+                this.updateStatus(`Disconnected: ${reason}`);
+            });
+            
+            // Connect to the room
+            await this.room.connect(sessionData.url, sessionData.access_token);
+            this.updateStatus('LiveKit connection established!');
+            
+        } catch (error) {
+            console.error('LiveKit connection error:', error);
+            this.updateStatus('Video connection failed, but audio should work');
+            
+            // Show fallback placeholder
             const videoElement = document.getElementById('videoElement');
             videoElement.style.backgroundColor = '#1e40af';
             videoElement.style.display = 'flex';
             videoElement.style.alignItems = 'center';
             videoElement.style.justifyContent = 'center';
             videoElement.style.color = 'white';
-            videoElement.style.fontSize = '18px';
             videoElement.innerHTML = `
                 <div style="text-align: center; padding: 20px;">
                     <div style="font-size: 48px; margin-bottom: 10px;">🤖</div>
@@ -118,12 +171,6 @@ class HeyGenAvatarApp {
                     <div id="speakingIndicator" style="font-size: 14px; margin-top: 10px; opacity: 0;">🎤 Speaking...</div>
                 </div>
             `;
-            
-            this.updateStatus('Avatar ready - audio working!');
-            
-        } catch (error) {
-            console.error('Setup error:', error);
-            this.updateStatus('Avatar setup completed');
         }
     }
 
@@ -235,7 +282,7 @@ class HeyGenAvatarApp {
             
             // Clean up LiveKit connection
             if (this.room) {
-                await this.room.disconnect();
+                this.room.disconnect();
                 this.room = null;
             }
             
