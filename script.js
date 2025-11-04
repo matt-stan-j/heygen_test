@@ -1,17 +1,11 @@
 class HeyGenAWS {
     constructor() {
-        this.avatar = null;
+        this.room = null;
         this.chatSessionId = this.generateUUID();
         this.avatarReady = false;
         
         // Replace with your API Gateway URL
         this.AWS_API_URL = 'https://x4p585jeee.execute-api.ap-southeast-1.amazonaws.com/prod';
-        
-        // Debug: Check what's available
-        console.log('All window objects with Stream/HeyGen:', Object.keys(window).filter(k => k.toLowerCase().includes('stream') || k.toLowerCase().includes('heygen')));
-        console.log('window.StreamingAvatar:', typeof window.StreamingAvatar);
-        console.log('window.HeyGenStreamingAvatar:', typeof window.HeyGenStreamingAvatar);
-        console.log('window.StreamingEvents:', typeof window.StreamingEvents);
         
         this.initializeEventListeners();
         this.updateStatus('Ready to start');
@@ -71,53 +65,38 @@ class HeyGenAWS {
             // Get access token
             const accessToken = await this.fetchAccessToken();
             
-            // Initialize avatar with HeyGen SDK
-            this.updateStatus('Initializing avatar...');
-            this.avatar = new window.HeyGenStreamingAvatar.StreamingAvatar({ token: accessToken });
+            // Parse the JWT token to get connection details
+            const tokenData = JSON.parse(atob(accessToken.split('.')[1]));
+            console.log('Token data:', tokenData);
+            
+            // Connect to LiveKit room
+            this.updateStatus('Connecting to LiveKit...');
+            this.room = new LiveKit.Room();
             
             // Set up event listeners
-            this.avatar.on(window.HeyGenStreamingAvatar.StreamingEvents.AVATAR_START_TALKING, (e) => {
-                console.log('Avatar started talking', e);
-                this.updateStatus('Avatar is speaking...');
+            this.room.on(LiveKit.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                console.log('Track subscribed:', track.kind);
+                if (track.kind === 'video') {
+                    const mediaElement = document.getElementById('mediaElement');
+                    track.attach(mediaElement);
+                    this.avatarReady = true;
+                    this.updateStatus('Avatar ready for conversation!');
+                }
             });
             
-            this.avatar.on(window.HeyGenStreamingAvatar.StreamingEvents.AVATAR_STOP_TALKING, (e) => {
-                console.log('Avatar stopped talking', e);
-                this.updateStatus('Avatar finished speaking');
+            this.room.on(LiveKit.RoomEvent.Connected, () => {
+                console.log('Connected to room');
+                this.updateStatus('Connected to avatar session!');
             });
             
-            this.avatar.on(window.HeyGenStreamingAvatar.StreamingEvents.STREAM_DISCONNECTED, () => {
-                console.log('Stream disconnected');
-                this.updateStatus('Stream disconnected');
+            this.room.on(LiveKit.RoomEvent.Disconnected, () => {
+                console.log('Disconnected from room');
+                this.updateStatus('Disconnected from session');
                 this.avatarReady = false;
             });
             
-            this.avatar.on(window.HeyGenStreamingAvatar.StreamingEvents.STREAM_READY, (event) => {
-                console.log('Stream ready:', event.detail);
-                this.updateStatus('Avatar stream ready!');
-                
-                // Set up video element
-                const mediaElement = document.getElementById('mediaElement');
-                mediaElement.srcObject = event.detail;
-                mediaElement.onloadedmetadata = () => {
-                    mediaElement.play();
-                    this.avatarReady = true;
-                    this.updateStatus('Avatar ready for conversation!');
-                };
-            });
-            
-            // Start avatar session
-            this.updateStatus('Starting avatar session...');
-            await this.avatar.createStartAvatar({
-                quality: 'low', // Use 'low' for better performance
-                avatarName: document.getElementById('avatarID').value || 'Wayne_20240711',
-                knowledgeId: undefined,
-                voice: {
-                    rate: 1.0,
-                    emotion: 'EXCITED'
-                },
-                language: 'en'
-            });
+            // Connect to the room
+            await this.room.connect(tokenData.url, accessToken);
             
             this.updateStatus('Avatar session started successfully!');
 
@@ -172,12 +151,14 @@ class HeyGenAWS {
             
             this.updateStatus(`AI: ${botMessage}`);
 
-            // Make avatar speak using SDK
-            if (this.avatar && botMessage) {
-                await this.avatar.speak({
-                    text: botMessage,
-                    task_type: 'repeat'
-                });
+            // Send message to avatar via data channel
+            if (this.room && botMessage) {
+                const encoder = new TextEncoder();
+                const data = encoder.encode(JSON.stringify({
+                    type: 'speak',
+                    text: botMessage
+                }));
+                this.room.localParticipant.publishData(data, LiveKit.DataPacket_Kind.RELIABLE);
             }
 
         } catch (error) {
@@ -187,7 +168,7 @@ class HeyGenAWS {
     }
 
     async closeSession() {
-        if (!this.avatar) {
+        if (!this.room) {
             this.updateStatus('No active session');
             return;
         }
@@ -195,8 +176,8 @@ class HeyGenAWS {
         this.updateStatus('Closing session...');
         
         try {
-            await this.avatar.stopAvatar();
-            this.avatar = null;
+            await this.room.disconnect();
+            this.room = null;
             this.avatarReady = false;
             
             document.getElementById('startBtn').disabled = false;
