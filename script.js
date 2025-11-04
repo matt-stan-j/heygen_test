@@ -1,11 +1,7 @@
 class HeyGenAWS {
     constructor() {
-        this.sessionInfo = null;
-        this.room = null;
-        this.mediaStream = null;
-        this.sessionToken = null;
+        this.avatar = null;
         this.chatSessionId = this.generateUUID();
-        this.videoReady = false;
         this.avatarReady = false;
         
         // Replace with your API Gateway URL
@@ -21,17 +17,6 @@ class HeyGenAWS {
             const v = c == 'x' ? r : (r & 0x3 | 0x8);
             return v.toString(16);
         });
-    }
-
-    decodeHtml(html) {
-        if (!html || typeof html !== 'string') return html;
-        // Only decode if it contains HTML entities
-        if (html.includes('&')) {
-            const txt = document.createElement('textarea');
-            txt.innerHTML = html;
-            return txt.value;
-        }
-        return html;
     }
 
     initializeEventListeners() {
@@ -51,50 +36,84 @@ class HeyGenAWS {
         console.log(`[${timestamp}] ${message}`);
     }
 
-    async startSession() {
+    async fetchAccessToken() {
         try {
-            this.updateStatus('Creating HeyGen session...');
-            document.getElementById('startBtn').disabled = true;
-            this.videoReady = false;
-            this.avatarReady = false;
-            
-            // Call AWS Lambda to create HeyGen session
             const response = await fetch(`${this.AWS_API_URL}/heygen/create`, {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
                     'Origin': window.location.origin
                 },
-                mode: 'cors',
-                body: JSON.stringify({
-                    avatar_name: document.getElementById('avatarID').value,
-                    voice_id: document.getElementById('voiceID').value
-                })
+                mode: 'cors'
             });
+            
+            const token = await response.text();
+            console.log("Access Token:", token.substring(0, 10) + "...");
+            return token;
+        } catch (error) {
+            console.error("Error fetching access token:", error);
+            throw error;
+        }
+    }
 
-            const data = await response.json();
-            console.log("Create session response:", data);
+    async startSession() {
+        try {
+            this.updateStatus('Getting access token...');
+            document.getElementById('startBtn').disabled = true;
+            this.avatarReady = false;
             
-            // Handle nested response format
-            if (data.body) {
-                const bodyData = JSON.parse(data.body);
-                this.sessionInfo = bodyData.session_info;
-                this.sessionToken = this.decodeHtml(bodyData.session_token);
-            } else {
-                this.sessionInfo = data.session_info;
-                this.sessionToken = this.decodeHtml(data.session_token);
-            }
+            // Get access token
+            const accessToken = await this.fetchAccessToken();
             
-            if (!this.sessionInfo) {
-                throw new Error("Failed to create session");
-            }
+            // Initialize avatar with HeyGen SDK
+            this.updateStatus('Initializing avatar...');
+            this.avatar = new window.StreamingAvatar({ token: accessToken });
             
-            this.updateStatus(`Session created: ${this.sessionInfo.session_id}`);
-
-            await this.setupLiveKit();
-            await this.startStreaming();
+            // Set up event listeners
+            this.avatar.on(window.StreamingEvents.AVATAR_START_TALKING, (e) => {
+                console.log('Avatar started talking', e);
+                this.updateStatus('Avatar is speaking...');
+            });
             
-            this.updateStatus('Avatar ready!');
+            this.avatar.on(window.StreamingEvents.AVATAR_STOP_TALKING, (e) => {
+                console.log('Avatar stopped talking', e);
+                this.updateStatus('Avatar finished speaking');
+            });
+            
+            this.avatar.on(window.StreamingEvents.STREAM_DISCONNECTED, () => {
+                console.log('Stream disconnected');
+                this.updateStatus('Stream disconnected');
+                this.avatarReady = false;
+            });
+            
+            this.avatar.on(window.StreamingEvents.STREAM_READY, (event) => {
+                console.log('Stream ready:', event.detail);
+                this.updateStatus('Avatar stream ready!');
+                
+                // Set up video element
+                const mediaElement = document.getElementById('mediaElement');
+                mediaElement.srcObject = event.detail;
+                mediaElement.onloadedmetadata = () => {
+                    mediaElement.play();
+                    this.avatarReady = true;
+                    this.updateStatus('Avatar ready for conversation!');
+                };
+            });
+            
+            // Start avatar session
+            this.updateStatus('Starting avatar session...');
+            await this.avatar.createStartAvatar({
+                quality: 'low', // Use 'low' for better performance
+                avatarName: document.getElementById('avatarID').value || 'Wayne_20240711',
+                knowledgeId: undefined,
+                voice: {
+                    rate: 1.0,
+                    emotion: 'EXCITED'
+                },
+                language: 'en'
+            });
+            
+            this.updateStatus('Avatar session started successfully!');
 
         } catch (error) {
             document.getElementById('startBtn').disabled = false;
@@ -103,108 +122,22 @@ class HeyGenAWS {
         }
     }
 
-    async setupLiveKit() {
-        this.updateStatus('Setting up LiveKit connection...');
-        
-        try {
-            this.room = new LivekitClient.Room({
-                adaptiveStream: true,
-                dynacast: true,
-                videoCaptureDefaults: {
-                    resolution: LivekitClient.VideoPresets.h720.resolution,
-                }
-            });
-
-            this.mediaStream = new MediaStream();
-            
-            this.room.on(LivekitClient.RoomEvent.TrackSubscribed, (track) => {
-                console.log("Track subscribed:", track.kind);
-                if (track.kind === 'video' || track.kind === 'audio') {
-                    this.mediaStream.addTrack(track.mediaStreamTrack);
-                    if (track.kind === 'video') {
-                        const mediaElement = document.getElementById('mediaElement');
-                        mediaElement.srcObject = this.mediaStream;
-                        
-                        // Wait for video to actually start playing
-                        mediaElement.onloadeddata = () => {
-                            this.updateStatus('Video stream connected');
-                            this.videoReady = true;
-                        };
-                        
-                        mediaElement.oncanplay = () => {
-                            this.updateStatus('Video ready to play');
-                        };
-                    }
-                }
-            });
-            
-            this.room.on(LivekitClient.RoomEvent.Connected, () => {
-                console.log('LiveKit room connected');
-                this.updateStatus('LiveKit room connected');
-            });
-
-            await this.room.prepareConnection(this.sessionInfo.url, this.sessionInfo.access_token);
-            this.updateStatus('LiveKit connection prepared');
-        } catch (error) {
-            this.updateStatus(`LiveKit setup error: ${error.message}`);
-            console.error("LiveKit setup error:", error);
-            throw error;
-        }
-    }
-
-    async startStreaming() {
-        this.updateStatus('Starting streaming...');
-        
-        try {
-            // Connect to LiveKit - this automatically starts the session
-            await this.room.connect(this.sessionInfo.url, this.sessionInfo.access_token);
-            this.updateStatus('LiveKit connected');
-            
-            // Wait for video track to be available
-            let attempts = 0;
-            while (!this.videoReady && attempts < 60) {
-                await new Promise(resolve => setTimeout(resolve, 500));
-                attempts++;
-            }
-            
-            if (this.videoReady) {
-                this.updateStatus('Video stream ready');
-                // Try to play the video to ensure it's working
-                try {
-                    await document.getElementById('mediaElement').play();
-                    this.updateStatus('Video playing successfully');
-                } catch (playError) {
-                    console.log('Video autoplay blocked, but continuing...');
-                }
-            } else {
-                this.updateStatus('Warning: Video not ready, but continuing...');
-            }
-            
-            // Additional wait for session to be fully ready for speak commands
-            // HeyGen typically needs 10-12 seconds to be fully ready
-            await new Promise(resolve => setTimeout(resolve, 10000));
-            
-            this.avatarReady = true;
-            this.updateStatus('Streaming started');
-        } catch (error) {
-            this.updateStatus(`Streaming error: ${error.message}`);
-            console.error("Streaming error:", error);
-            throw error;
-        }
-    }
-
     async sendToAI() {
         const input = document.getElementById('taskInput');
         const message = input.value.trim();
         if (!message) return;
 
+        if (!this.avatarReady) {
+            this.updateStatus('Avatar not ready yet, please wait...');
+            return;
+        }
+
         this.updateStatus(`You: ${message}`);
         input.value = '';
 
         try {
-            // Send to your AI backend
+            // Send to AI backend
             this.updateStatus('Sending to AI...');
-            console.log("Sending to AI:", message);
             
             const aiResponse = await fetch(`${this.AWS_API_URL}/chat`, {
                 method: 'POST',
@@ -222,10 +155,9 @@ class HeyGenAWS {
             const aiData = await aiResponse.json();
             console.log("AI response:", aiData);
             
-            // Parse the nested JSON response
+            // Parse the response
             let botMessage;
             if (aiData.body) {
-                // Response from API Gateway includes a body property with JSON string
                 const bodyData = JSON.parse(aiData.body);
                 botMessage = bodyData.message;
             } else {
@@ -234,13 +166,12 @@ class HeyGenAWS {
             
             this.updateStatus(`AI: ${botMessage}`);
 
-            // Make avatar speak the AI response
-            if (this.sessionInfo && botMessage) {
-                if (this.avatarReady) {
-                    await this.makeAvatarSpeak(botMessage);
-                } else {
-                    this.updateStatus('Avatar not ready yet, please wait...');
-                }
+            // Make avatar speak using SDK
+            if (this.avatar && botMessage) {
+                await this.avatar.speak({
+                    text: botMessage,
+                    task_type: 'repeat'
+                });
             }
 
         } catch (error) {
@@ -249,55 +180,8 @@ class HeyGenAWS {
         }
     }
 
-    async makeAvatarSpeak(text) {
-        this.updateStatus('Avatar speaking...');
-        console.log("Making avatar speak:", text);
-        
-        try {
-            const speakResponse = await fetch(`${this.AWS_API_URL}/heygen/speak`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Origin': window.location.origin
-                },
-                mode: 'cors',
-                body: JSON.stringify({
-                    session_id: this.sessionInfo.session_id,
-                    session_token: this.sessionToken,
-                    text: text
-                })
-            });
-            
-            const speakData = await speakResponse.json();
-            console.log("Speak response:", speakData);
-            
-            // Handle nested response format
-            let success = false;
-            if (speakData.body) {
-                const bodyData = JSON.parse(speakData.body);
-                success = bodyData.success;
-            } else {
-                success = speakData.success;
-            }
-            
-            // Also check if there's an error in the response
-            if (speakData.error) {
-                throw new Error(speakData.error);
-            }
-            
-            if (success) {
-                this.updateStatus('Avatar speaking request sent');
-            } else {
-                this.updateStatus('Failed to make avatar speak');
-            }
-        } catch (error) {
-            this.updateStatus(`Speak error: ${error.message}`);
-            console.error("Speak error:", error);
-        }
-    }
-
     async closeSession() {
-        if (!this.sessionInfo) {
+        if (!this.avatar) {
             this.updateStatus('No active session');
             return;
         }
@@ -305,33 +189,9 @@ class HeyGenAWS {
         this.updateStatus('Closing session...');
         
         try {
-            // Close HeyGen session
-            const closeResponse = await fetch(`${this.AWS_API_URL}/heygen/close`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Origin': window.location.origin
-                },
-                mode: 'cors',
-                body: JSON.stringify({
-                    session_id: this.sessionInfo.session_id,
-                    session_token: this.sessionToken
-                })
-            });
-            
-            const closeData = await closeResponse.json();
-            console.log("Close session response:", closeData);
-            
-            // Disconnect LiveKit
-            if (this.room) {
-                await this.room.disconnect();
-                this.room = null;
-            }
-            
-            // Reset state
-            this.sessionInfo = null;
-            this.sessionToken = null;
-            this.mediaStream = null;
+            await this.avatar.stopAvatar();
+            this.avatar = null;
+            this.avatarReady = false;
             
             document.getElementById('startBtn').disabled = false;
             document.getElementById('mediaElement').srcObject = null;
@@ -348,4 +208,3 @@ class HeyGenAWS {
 document.addEventListener('DOMContentLoaded', () => {
     window.heygenAWS = new HeyGenAWS();
 });
-
