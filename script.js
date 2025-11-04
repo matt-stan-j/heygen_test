@@ -180,7 +180,7 @@ class HeyGenAvatarApp {
     setupWebSocket(sessionData) {
         try {
             // Create WebSocket connection to monitor avatar events
-            const wsUrl = `wss://api.heygen.com/v1/ws/streaming.chat?session_id=${this.sessionId}&session_token=${sessionData.access_token}&silence_response=false`;
+            const wsUrl = `wss://api.heygen.com/v1/ws/streaming.chat?session_id=${this.sessionId}&session_token=${sessionData.session_token}&silence_response=false`;
             
             this.webSocket = new WebSocket(wsUrl);
             
