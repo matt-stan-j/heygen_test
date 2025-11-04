@@ -36,7 +36,7 @@ class HeyGenAWS {
         console.log(`[${timestamp}] ${message}`);
     }
 
-    async fetchSessionData() {
+    async fetchAccessToken() {
         try {
             const response = await fetch(`${this.AWS_API_URL}/heygen/create`, {
                 method: 'POST',
@@ -44,39 +44,69 @@ class HeyGenAWS {
                     'Content-Type': 'application/json',
                     'Origin': window.location.origin
                 },
-                mode: 'cors',
-                body: JSON.stringify({
-                    avatar_name: document.getElementById('avatarID').value || 'Wayne_20240711'
-                })
+                mode: 'cors'
             });
             
-            const data = await response.json();
-            console.log("Session data:", data);
-            return data;
+            const token = await response.text();
+            console.log("Access Token:", token.substring(0, 10) + "...");
+            return token;
         } catch (error) {
-            console.error("Error fetching session data:", error);
+            console.error("Error fetching access token:", error);
             throw error;
         }
     }
 
     async startSession() {
         try {
-            this.updateStatus('Creating streaming session...');
+            this.updateStatus('Getting access token...');
             document.getElementById('startBtn').disabled = true;
             this.avatarReady = false;
             
-            // Get session data from backend
-            const sessionResponse = await this.fetchSessionData();
+            // Get access token
+            const accessToken = await this.fetchAccessToken();
             
-            if (sessionResponse.session_data && sessionResponse.session_data.sdp) {
-                this.updateStatus('Setting up WebRTC connection...');
-                this.accessToken = sessionResponse.access_token;
-                await this.setupWebRTC(sessionResponse.session_data.sdp, sessionResponse.session_data.ice_servers);
-                this.avatarReady = true;
-                this.updateStatus('Avatar ready for conversation!');
+            // Check if HeyGen SDK is available
+            console.log('Available HeyGen objects:', Object.keys(window).filter(k => k.toLowerCase().includes('heygen') || k.toLowerCase().includes('stream')));
+            
+            // Try different possible SDK object names
+            let StreamingAvatar, StreamingEvents;
+            if (window.HeyGenStreamingAvatar) {
+                StreamingAvatar = window.HeyGenStreamingAvatar.StreamingAvatar;
+                StreamingEvents = window.HeyGenStreamingAvatar.StreamingEvents;
+            } else if (window.StreamingAvatar) {
+                StreamingAvatar = window.StreamingAvatar;
+                StreamingEvents = window.StreamingEvents;
             } else {
-                throw new Error('Failed to get session data from backend');
+                throw new Error('HeyGen SDK not loaded properly');
             }
+            
+            // Initialize avatar
+            this.updateStatus('Initializing avatar...');
+            this.avatar = new StreamingAvatar({ token: accessToken });
+            
+            // Set up event listeners
+            this.avatar.on(StreamingEvents.STREAM_READY, (event) => {
+                console.log('Stream ready:', event.detail);
+                this.updateStatus('Avatar stream ready!');
+                
+                const mediaElement = document.getElementById('mediaElement');
+                mediaElement.srcObject = event.detail;
+                mediaElement.onloadedmetadata = () => {
+                    mediaElement.play();
+                    this.avatarReady = true;
+                    this.updateStatus('Avatar ready for conversation!');
+                };
+            });
+            
+            // Start avatar
+            await this.avatar.createStartAvatar({
+                quality: 'low',
+                avatarName: document.getElementById('avatarID').value || 'Wayne_20240711',
+                voice: { rate: 1.0, emotion: 'EXCITED' },
+                language: 'en'
+            });
+            
+            this.updateStatus('Avatar session started!');
 
         } catch (error) {
             document.getElementById('startBtn').disabled = false;
@@ -149,23 +179,12 @@ class HeyGenAWS {
             
             this.updateStatus(`AI: ${botMessage}`);
 
-            // Send speak command via backend
-            if (this.avatarReady && botMessage) {
-                const speakResponse = await fetch(`${this.AWS_API_URL}/heygen/speak`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Origin': window.location.origin
-                    },
-                    mode: 'cors',
-                    body: JSON.stringify({
-                        access_token: this.accessToken,
-                        text: botMessage
-                    })
+            // Make avatar speak
+            if (this.avatar && this.avatarReady && botMessage) {
+                await this.avatar.speak({
+                    text: botMessage,
+                    task_type: 'repeat'
                 });
-                
-                const speakResult = await speakResponse.json();
-                console.log('Speak result:', speakResult);
             }
 
         } catch (error) {
@@ -175,7 +194,7 @@ class HeyGenAWS {
     }
 
     async closeSession() {
-        if (!this.avatarReady) {
+        if (!this.avatar) {
             this.updateStatus('No active session');
             return;
         }
@@ -183,13 +202,10 @@ class HeyGenAWS {
         this.updateStatus('Closing session...');
         
         try {
-            // Close WebRTC connection
-            if (this.pc) {
-                this.pc.close();
-                this.pc = null;
-            }
-            
+            await this.avatar.stopAvatar();
+            this.avatar = null;
             this.avatarReady = false;
+            
             document.getElementById('startBtn').disabled = false;
             document.getElementById('mediaElement').srcObject = null;
             
