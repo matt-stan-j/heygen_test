@@ -36,7 +36,7 @@ class HeyGenAWS {
         console.log(`[${timestamp}] ${message}`);
     }
 
-    async fetchAccessToken() {
+    async fetchSessionData() {
         try {
             const response = await fetch(`${this.AWS_API_URL}/heygen/create`, {
                 method: 'POST',
@@ -44,56 +44,38 @@ class HeyGenAWS {
                     'Content-Type': 'application/json',
                     'Origin': window.location.origin
                 },
-                mode: 'cors'
+                mode: 'cors',
+                body: JSON.stringify({
+                    avatar_name: document.getElementById('avatarID').value || 'Wayne_20240711'
+                })
             });
             
-            const token = await response.text();
-            console.log("Access Token:", token.substring(0, 10) + "...");
-            return token;
+            const data = await response.json();
+            console.log("Session data:", data);
+            return data;
         } catch (error) {
-            console.error("Error fetching access token:", error);
+            console.error("Error fetching session data:", error);
             throw error;
         }
     }
 
     async startSession() {
         try {
-            this.updateStatus('Getting access token...');
+            this.updateStatus('Creating streaming session...');
             document.getElementById('startBtn').disabled = true;
             this.avatarReady = false;
             
-            // Get access token
-            const accessToken = await this.fetchAccessToken();
+            // Get session data from backend
+            const sessionResponse = await this.fetchSessionData();
             
-            // Start streaming session with HeyGen API
-            this.updateStatus('Starting streaming session...');
-            const startResponse = await fetch('https://api.heygen.com/v1/streaming.start', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    quality: 'low',
-                    avatar_name: document.getElementById('avatarID').value || 'Wayne_20240711',
-                    voice: {
-                        voice_id: 'BV019_en',
-                        rate: 1.0,
-                        emotion: 'EXCITED'
-                    }
-                })
-            });
-            
-            const sessionData = await startResponse.json();
-            console.log('Session data:', sessionData);
-            
-            if (sessionData.data && sessionData.data.sdp) {
+            if (sessionResponse.session_data && sessionResponse.session_data.sdp) {
                 this.updateStatus('Setting up WebRTC connection...');
-                await this.setupWebRTC(sessionData.data.sdp, sessionData.data.ice_servers);
+                this.accessToken = sessionResponse.access_token;
+                await this.setupWebRTC(sessionResponse.session_data.sdp, sessionResponse.session_data.ice_servers);
                 this.avatarReady = true;
                 this.updateStatus('Avatar ready for conversation!');
             } else {
-                throw new Error('Failed to get session data from HeyGen');
+                throw new Error('Failed to get session data from backend');
             }
 
         } catch (error) {
@@ -167,17 +149,18 @@ class HeyGenAWS {
             
             this.updateStatus(`AI: ${botMessage}`);
 
-            // Send speak command to HeyGen API
+            // Send speak command via backend
             if (this.avatarReady && botMessage) {
-                const speakResponse = await fetch('https://api.heygen.com/v1/streaming.speak', {
+                const speakResponse = await fetch(`${this.AWS_API_URL}/heygen/speak`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${await this.fetchAccessToken()}`,
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Origin': window.location.origin
                     },
+                    mode: 'cors',
                     body: JSON.stringify({
-                        text: botMessage,
-                        task_type: 'repeat'
+                        access_token: this.accessToken,
+                        text: botMessage
                     })
                 });
                 
