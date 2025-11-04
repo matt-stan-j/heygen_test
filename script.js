@@ -13,6 +13,25 @@ class HeyGenAWS {
         this.updateStatus('Ready to start');
     }
 
+    generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            const r = Math.random() * 16 | 0;
+            const v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
+    decodeHtml(html) {
+        if (!html || typeof html !== 'string') return html;
+        // Only decode if it contains HTML entities
+        if (html.includes('&')) {
+            const txt = document.createElement('textarea');
+            txt.innerHTML = html;
+            return txt.value;
+        }
+        return html;
+    }
+
     initializeEventListeners() {
         document.getElementById('startBtn').onclick = () => this.startSession();
         document.getElementById('closeBtn').onclick = () => this.closeSession();
@@ -38,7 +57,11 @@ class HeyGenAWS {
             // Call AWS Lambda to create HeyGen session
             const response = await fetch(`${this.AWS_API_URL}/heygen/create`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Origin': window.location.origin
+                },
+                mode: 'cors',
                 body: JSON.stringify({
                     avatar_name: document.getElementById('avatarID').value,
                     voice_id: document.getElementById('voiceID').value
@@ -52,10 +75,10 @@ class HeyGenAWS {
             if (data.body) {
                 const bodyData = JSON.parse(data.body);
                 this.sessionInfo = bodyData.session_info;
-                this.sessionToken = bodyData.session_token;
+                this.sessionToken = this.decodeHtml(bodyData.session_token);
             } else {
                 this.sessionInfo = data.session_info;
-                this.sessionToken = data.session_token;
+                this.sessionToken = this.decodeHtml(data.session_token);
             }
             
             if (!this.sessionInfo) {
@@ -114,10 +137,21 @@ class HeyGenAWS {
         this.updateStatus('Starting streaming...');
         
         try {
-            // Start streaming via AWS Lambda
+            // Connect to LiveKit first
+            await this.room.connect(this.sessionInfo.url, this.sessionInfo.access_token);
+            this.updateStatus('LiveKit connected');
+            
+            // Add a small delay to ensure connection is stable
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Then start the HeyGen session
             const startResponse = await fetch(`${this.AWS_API_URL}/heygen/start`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Origin': window.location.origin
+                },
+                mode: 'cors',
                 body: JSON.stringify({
                     session_id: this.sessionInfo.session_id,
                     session_token: this.sessionToken
@@ -126,8 +160,7 @@ class HeyGenAWS {
             
             const startData = await startResponse.json();
             console.log("Start streaming response:", startData);
-
-            await this.room.connect(this.sessionInfo.url, this.sessionInfo.access_token);
+            
             this.updateStatus('Streaming started');
         } catch (error) {
             this.updateStatus(`Streaming error: ${error.message}`);
@@ -151,7 +184,11 @@ class HeyGenAWS {
             
             const aiResponse = await fetch(`${this.AWS_API_URL}/chat`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Origin': window.location.origin
+                },
+                mode: 'cors',
                 body: JSON.stringify({
                     text: message,
                     session_id: this.chatSessionId
@@ -191,7 +228,11 @@ class HeyGenAWS {
         try {
             const speakResponse = await fetch(`${this.AWS_API_URL}/heygen/speak`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Origin': window.location.origin
+                },
+                mode: 'cors',
                 body: JSON.stringify({
                     session_id: this.sessionInfo.session_id,
                     session_token: this.sessionToken,
@@ -231,9 +272,14 @@ class HeyGenAWS {
         this.updateStatus('Closing session...');
         
         try {
+            // Close HeyGen session
             const closeResponse = await fetch(`${this.AWS_API_URL}/heygen/close`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Origin': window.location.origin
+                },
+                mode: 'cors',
                 body: JSON.stringify({
                     session_id: this.sessionInfo.session_id,
                     session_token: this.sessionToken
@@ -242,29 +288,31 @@ class HeyGenAWS {
             
             const closeData = await closeResponse.json();
             console.log("Close session response:", closeData);
-
+            
+            // Disconnect LiveKit
             if (this.room) {
-                this.room.disconnect();
+                await this.room.disconnect();
+                this.room = null;
             }
-
-            document.getElementById('mediaElement').srcObject = null;
-            document.getElementById('startBtn').disabled = false;
+            
+            // Reset state
             this.sessionInfo = null;
+            this.sessionToken = null;
+            this.mediaStream = null;
+            
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('mediaElement').srcObject = null;
+            
             this.updateStatus('Session closed');
+            
         } catch (error) {
-            this.updateStatus(`Error closing session: ${error.message}`);
+            this.updateStatus(`Close error: ${error.message}`);
             console.error("Close session error:", error);
         }
-    }
-
-    generateUUID() {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-        });
     }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     window.heygenAWS = new HeyGenAWS();
 });
+
