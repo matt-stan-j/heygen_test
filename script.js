@@ -122,10 +122,18 @@ class HeyGenAWS {
                 if (track.kind === 'video' || track.kind === 'audio') {
                     this.mediaStream.addTrack(track.mediaStreamTrack);
                     if (track.kind === 'video') {
-                        document.getElementById('mediaElement').srcObject = this.mediaStream;
-                        this.updateStatus('Video stream connected');
-                        // Set a flag that video is ready
-                        this.videoReady = true;
+                        const mediaElement = document.getElementById('mediaElement');
+                        mediaElement.srcObject = this.mediaStream;
+                        
+                        // Wait for video to actually start playing
+                        mediaElement.onloadeddata = () => {
+                            this.updateStatus('Video stream connected');
+                            this.videoReady = true;
+                        };
+                        
+                        mediaElement.oncanplay = () => {
+                            this.updateStatus('Video ready to play');
+                        };
                     }
                 }
             });
@@ -154,19 +162,27 @@ class HeyGenAWS {
             
             // Wait for video track to be available
             let attempts = 0;
-            while (!this.videoReady && attempts < 40) {
+            while (!this.videoReady && attempts < 60) {
                 await new Promise(resolve => setTimeout(resolve, 500));
                 attempts++;
             }
             
             if (this.videoReady) {
                 this.updateStatus('Video stream ready');
+                // Try to play the video to ensure it's working
+                try {
+                    await document.getElementById('mediaElement').play();
+                    this.updateStatus('Video playing successfully');
+                } catch (playError) {
+                    console.log('Video autoplay blocked, but continuing...');
+                }
             } else {
                 this.updateStatus('Warning: Video not ready, but continuing...');
             }
             
             // Additional wait for session to be fully ready for speak commands
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            // HeyGen typically needs 10-12 seconds to be fully ready
+            await new Promise(resolve => setTimeout(resolve, 10000));
             
             this.avatarReady = true;
             this.updateStatus('Streaming started');
