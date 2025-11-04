@@ -56,35 +56,15 @@ class HeyGenAvatarApp {
             
             if (sessionData.data && sessionData.data.session_id) {
                 this.sessionId = sessionData.data.session_id;
+                this.isSessionActive = true;
                 this.updateStatus(`Session created! ID: ${this.sessionId}`);
                 
-                // Start the session
-                this.updateStatus('Starting session...');
-                const startResponse = await fetch(`${this.AWS_API_URL}/heygen/start`, {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Origin': window.location.origin
-                    },
-                    mode: 'cors',
-                    body: JSON.stringify({ session_id: this.sessionId })
-                });
-                
-                const startData = await startResponse.json();
-                console.log('Start data:', startData);
-                
-                if (startData.data) {
-                    this.isSessionActive = true;
-                    
-                    // Set up WebRTC connection if available
-                    if (startData.data.sdp) {
-                        await this.setupWebRTC(startData.data);
-                    }
-                    
-                    this.updateStatus('Avatar ready for conversation!');
-                } else {
-                    throw new Error('Failed to start session');
+                // Set up WebRTC connection if available
+                if (sessionData.data.url) {
+                    await this.setupWebRTC(sessionData.data);
                 }
+                
+                this.updateStatus('Avatar ready for conversation!');
             } else {
                 throw new Error('Failed to create session');
             }
@@ -98,40 +78,19 @@ class HeyGenAvatarApp {
 
     async setupWebRTC(sessionData) {
         try {
-            this.updateStatus('Setting up video connection...');
+            this.updateStatus('Setting up LiveKit connection...');
             
-            // Create RTCPeerConnection
-            this.pc = new RTCPeerConnection({
-                iceServers: sessionData.ice_servers || []
-            });
+            // For now, just log the connection details
+            console.log('LiveKit URL:', sessionData.url);
+            console.log('Access Token:', sessionData.access_token?.substring(0, 20) + '...');
             
-            // Handle incoming video stream
-            this.pc.ontrack = (event) => {
-                console.log('Received track:', event.track.kind);
-                if (event.track.kind === 'video') {
-                    const videoElement = document.getElementById('videoElement');
-                    videoElement.srcObject = event.streams[0];
-                    videoElement.play();
-                }
-            };
-            
-            // Set remote description
-            if (sessionData.sdp) {
-                await this.pc.setRemoteDescription({
-                    type: 'offer',
-                    sdp: sessionData.sdp
-                });
-                
-                // Create and set local description
-                const answer = await this.pc.createAnswer();
-                await this.pc.setLocalDescription(answer);
-                
-                this.updateStatus('WebRTC connection established');
-            }
+            // The actual LiveKit connection would be handled by the HeyGen SDK
+            // For direct API usage, we might need to implement LiveKit client
+            this.updateStatus('Connection details received');
             
         } catch (error) {
-            console.error('WebRTC setup error:', error);
-            this.updateStatus('WebRTC setup failed, but session is active');
+            console.error('Connection setup error:', error);
+            this.updateStatus('Connection setup failed, but session is active');
         }
     }
 
